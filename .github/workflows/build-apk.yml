@@ -21,14 +21,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" || \
-            sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+          export ANDROID_HOME="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          SDKM=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
+          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+          "$SDKM" "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+          "$SDKM" "build-tools;37.0.0" || true
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -38,12 +37,14 @@ jobs:
 
       - name: Build Flutter AAR (liquid_glass_widgets)
         run: |
+          export ANDROID_HOME="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
           cd flutter_glass
           flutter pub get
           flutter build aar --no-debug --no-profile --no-pub
 
       - name: Build debug APK
         run: |
+          export ANDROID_HOME="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
           chmod +x ./gradlew
           ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
