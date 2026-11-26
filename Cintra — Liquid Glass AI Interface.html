@@ -1,0 +1,2458 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Cintra — Liquid Glass AI Interface</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --font-sans: 'IBM Plex Sans Arabic', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      --spring: cubic-bezier(0.22, 1, 0.36, 1);
+      --spring-jelly: cubic-bezier(0.34, 1.48, 0.64, 1);
+    }
+
+    /* ================= DARK THEME (OBSIDIAN OPTICAL GLASS) ================= */
+    [data-theme="dark"] {
+      --bg-canvas: #090A0D;
+      --bg-mesh:
+        radial-gradient(620px circle at 85% 12%, rgba(148, 163, 184, 0.14), transparent 60%),
+        radial-gradient(540px circle at 15% 84%, rgba(56, 189, 248, 0.11), transparent 58%),
+        radial-gradient(460px circle at 50% 48%, rgba(255, 255, 255, 0.04), transparent 65%);
+      --bg-surface: #13151B;
+      --bg-surface-2: #1A1D25;
+      --bg-surface-hover: #222631;
+      --bg-user-bubble: rgba(255, 255, 255, 0.09);
+      --bg-code: #0D0F14;
+      --bg-code-header: #171A22;
+      --text-primary: #F5F6F8;
+      --text-secondary: #A1A7B5;
+      --text-muted: #6C7382;
+      --border-subtle: rgba(255, 255, 255, 0.09);
+      --accent-solid: #F5F6F8;
+      --accent-solid-text: #090A0D;
+      --accent-blue: #38BDF8;
+      --accent-blue-soft: rgba(56, 189, 248, 0.15);
+      --accent-emerald: #34D399;
+      --accent-emerald-soft: rgba(52, 211, 153, 0.15);
+      --accent-amber: #FBBF24;
+      --accent-amber-soft: rgba(251, 191, 36, 0.15);
+      --accent-rose: #FB7185;
+      --accent-rose-soft: rgba(251, 113, 133, 0.15);
+
+      /* True Optical Liquid Glass Surface (Dark — Zero Neon) */
+      --lg-tint: rgba(22, 25, 33, 0.36);
+      --lg-tint-modal: rgba(18, 21, 28, 0.48);
+      --lg-rim-top: rgba(255, 255, 255, 0.42);
+      --lg-rim-side: rgba(255, 255, 255, 0.16);
+      --lg-rim-bottom: rgba(255, 255, 255, 0.08);
+      --lg-inner-glow: inset 0 1.5px 1px rgba(255, 255, 255, 0.34), inset 0 -1px 2px rgba(255, 255, 255, 0.08), inset 1px 0 1px rgba(255, 255, 255, 0.12), inset -1px 0 1px rgba(255, 255, 255, 0.12);
+      --lg-sheen: linear-gradient(155deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.05) 36%, rgba(255, 255, 255, 0.0) 62%, rgba(255, 255, 255, 0.07) 100%);
+      --lg-shadow: 0 16px 40px rgba(0, 0, 0, 0.52), 0 2px 10px rgba(0, 0, 0, 0.32);
+      --scrim-bg: rgba(4, 5, 8, 0.38);
+    }
+
+    /* ================= LIGHT THEME (ALABASTER DAYLIGHT GLASS) ================= */
+    [data-theme="light"] {
+      --bg-canvas: #EFF1F4;
+      --bg-mesh:
+        radial-gradient(640px circle at 84% 10%, rgba(14, 165, 233, 0.14), transparent 58%),
+        radial-gradient(540px circle at 14% 82%, rgba(100, 116, 139, 0.16), transparent 60%),
+        radial-gradient(480px circle at 50% 45%, rgba(255, 255, 255, 0.72), transparent 65%);
+      --bg-surface: #FFFFFF;
+      --bg-surface-2: #F4F5F8;
+      --bg-surface-hover: #E7EAF0;
+      --bg-user-bubble: rgba(15, 23, 42, 0.07);
+      --bg-code: #12151C;
+      --bg-code-header: #1C202A;
+      --text-primary: #101319;
+      --text-secondary: #4E5666;
+      --text-muted: #7C8496;
+      --border-subtle: rgba(16, 19, 25, 0.09);
+      --accent-solid: #101319;
+      --accent-solid-text: #FFFFFF;
+      --accent-blue: #0284C7;
+      --accent-blue-soft: rgba(2, 132, 199, 0.12);
+      --accent-emerald: #059669;
+      --accent-emerald-soft: rgba(5, 150, 105, 0.12);
+      --accent-amber: #D97706;
+      --accent-amber-soft: rgba(217, 119, 6, 0.12);
+      --accent-rose: #E11D48;
+      --accent-rose-soft: rgba(225, 29, 72, 0.12);
+
+      /* True Optical Liquid Glass Surface (Light) */
+      --lg-tint: rgba(255, 255, 255, 0.44);
+      --lg-tint-modal: rgba(255, 255, 255, 0.56);
+      --lg-rim-top: rgba(255, 255, 255, 0.98);
+      --lg-rim-side: rgba(255, 255, 255, 0.65);
+      --lg-rim-bottom: rgba(15, 23, 42, 0.14);
+      --lg-inner-glow: inset 0 2px 1.5px rgba(255, 255, 255, 0.96), inset 0 -1.5px 2px rgba(15, 23, 42, 0.07), inset 1px 0 1px rgba(255, 255, 255, 0.75), inset -1px 0 1px rgba(255, 255, 255, 0.75);
+      --lg-sheen: linear-gradient(155deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.22) 38%, rgba(255, 255, 255, 0.04) 64%, rgba(255, 255, 255, 0.42) 100%);
+      --lg-shadow: 0 14px 36px rgba(15, 23, 42, 0.11), 0 2px 8px rgba(15, 23, 42, 0.06);
+      --scrim-bg: rgba(15, 23, 42, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      font-family: var(--font-sans);
+      background-color: var(--bg-canvas);
+      background-image: var(--bg-mesh);
+      color: var(--text-primary);
+      overflow: hidden;
+      transition: background-color 0.35s var(--spring), color 0.35s var(--spring);
+    }
+
+    /* ================= TRUE LIQUID GLASS ENGINE ================= */
+    .lg-surface {
+      position: relative;
+      background: var(--lg-tint);
+      backdrop-filter: url(#lg-refract) blur(10px) saturate(195%) contrast(1.04);
+      -webkit-backdrop-filter: blur(18px) saturate(195%) contrast(1.04);
+      border-top: 1px solid var(--lg-rim-top);
+      border-left: 1px solid var(--lg-rim-side);
+      border-right: 1px solid var(--lg-rim-side);
+      border-bottom: 1px solid var(--lg-rim-bottom);
+      box-shadow: var(--lg-shadow), var(--lg-inner-glow);
+      overflow: hidden;
+    }
+
+    .lg-surface::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: var(--lg-sheen);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .lg-surface::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(
+        180px circle at var(--mx, 50%) var(--my, 20%),
+        rgba(255, 255, 255, 0.22),
+        transparent 70%
+      );
+      opacity: var(--spot-op, 0);
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .lg-surface:hover { --spot-op: 1; }
+    .lg-surface > * { position: relative; z-index: 1; }
+
+    .lg-modal-glass {
+      background: var(--lg-tint-modal);
+      backdrop-filter: url(#lg-refract-modal) blur(14px) saturate(210%) contrast(1.06);
+      -webkit-backdrop-filter: blur(22px) saturate(210%) contrast(1.06);
+    }
+
+    /* ================= WORKSPACE LAYOUT ================= */
+    .workspace {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 276px;
+      flex-shrink: 0;
+      height: 100%;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 40;
+      transition: transform 0.36s var(--spring), margin 0.36s var(--spring);
+    }
+
+    .sidebar-panel {
+      flex: 1;
+      border-radius: 26px;
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .sidebar.collapsed { margin-right: -276px; }
+
+    @media (max-width: 920px) {
+      .sidebar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 84%;
+        max-width: 306px;
+        margin-right: 0 !important;
+        transform: translateX(105%);
+      }
+      .sidebar.mobile-open { transform: translateX(0); }
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 4px;
+    }
+
+    .brand-id {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent-solid);
+      color: var(--accent-solid-text);
+    }
+
+    .new-chat-btn {
+      width: 100%;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      padding: 11px 14px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: transform 0.2s var(--spring-jelly), background 0.2s ease;
+    }
+
+    .new-chat-btn:hover { background: var(--bg-surface-hover); transform: translateY(-1px); }
+
+    .sidebar-section-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      padding: 4px 6px 0;
+    }
+
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .history-btn {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      text-align: right;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .history-btn:hover, .history-btn.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+    }
+
+    .history-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-footer {
+      padding-top: 10px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    /* ================= MAIN CHAT COLUMN ================= */
+    .main-column {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Floating Top Bar — Centered Cintra Model Selector (3-Column Grid) */
+    .floating-header {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      z-index: 25;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .header-start {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .header-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+    }
+
+    .header-end {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .lg-pill-btn {
+      height: 44px;
+      min-width: 44px;
+      padding: 0 12px;
+      border-radius: 999px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: transform 0.28s var(--spring-jelly);
+    }
+
+    .lg-pill-btn:hover { transform: translateY(-1px) scale(1.02); }
+    .lg-pill-btn:active { transform: scale(0.94); }
+
+    .model-trigger {
+      padding: 0 18px;
+      gap: 8px;
+    }
+
+    .model-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      flex-shrink: 0;
+    }
+
+    .theme-pill-label { font-size: 12.5px; font-weight: 600; }
+
+    @media (max-width: 600px) {
+      .theme-pill-label { display: none; }
+      .model-trigger { padding: 0 13px; font-size: 13px; }
+    }
+
+    /* Scrollable Chat Stream */
+    .chat-stream {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 84px 18px 182px;
+      scroll-behavior: smooth;
+    }
+
+    .chat-stream::-webkit-scrollbar { width: 6px; }
+    .chat-stream::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 99px; }
+
+    .chat-inner {
+      width: 100%;
+      max-width: 780px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Welcome State */
+    .welcome-box {
+      min-height: calc(100vh - 280px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 16px;
+      animation: fadeUp 0.45s var(--spring) both;
+    }
+
+    .welcome-orb {
+      width: 66px;
+      height: 66px;
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .welcome-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px;
+      width: 100%;
+      max-width: 680px;
+      margin-top: 8px;
+    }
+
+    .prompt-tile {
+      text-align: right;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: inherit;
+      padding: 14px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: transform 0.24s var(--spring-jelly), background 0.2s ease;
+    }
+
+    .prompt-tile:hover { background: var(--bg-surface-hover); transform: translateY(-2px); }
+
+    .prompt-tile-tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-blue);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Messages */
+    .user-row {
+      display: flex;
+      justify-content: flex-start;
+      animation: fadeUp 0.28s var(--spring) both;
+    }
+
+    .user-bubble {
+      max-width: 82%;
+      background: var(--bg-user-bubble);
+      border: 1px solid var(--border-subtle);
+      padding: 12px 17px;
+      border-radius: 22px 22px 22px 6px;
+      font-size: 15px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .user-attach-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      padding: 5px 10px;
+      border-radius: 10px;
+      width: fit-content;
+    }
+
+    .ai-row {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      animation: fadeUp 0.34s var(--spring) both;
+    }
+
+    .ai-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .ai-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 9px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-primary);
+    }
+
+    /* Thinking Card */
+    .thinking-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    .thinking-trigger {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+
+    .thinking-title { display: flex; align-items: center; gap: 8px; }
+
+    .thinking-content-wrap {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.32s var(--spring);
+    }
+
+    .thinking-box.expanded .thinking-content-wrap { grid-template-rows: 1fr; }
+    .thinking-content { overflow: hidden; }
+
+    .thinking-inner {
+      margin: 0 14px 12px;
+      padding-right: 12px;
+      border-right: 2px solid var(--accent-blue);
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+    }
+
+    /* Full Markdown (Always Active) */
+    .md-body { font-size: 15px; line-height: 1.78; color: var(--text-primary); }
+    .md-body h2 { font-size: 18px; font-weight: 700; margin: 12px 0 8px; }
+    .md-body h3 { font-size: 16px; font-weight: 700; margin: 12px 0 8px; }
+    .md-body p { margin-bottom: 10px; }
+    .md-body p:last-child { margin-bottom: 0; }
+    .md-body ul { padding-right: 22px; margin-bottom: 12px; }
+    .md-body li { margin-bottom: 6px; }
+    .md-body blockquote {
+      margin: 12px 0;
+      padding: 10px 14px;
+      border-right: 3px solid var(--accent-blue);
+      background: var(--bg-surface);
+      border-radius: 12px 4px 4px 12px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .md-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 14px 0;
+      border-radius: 16px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+    }
+
+    .md-table { width: 100%; border-collapse: collapse; font-size: 13.5px; text-align: right; }
+    .md-table th {
+      background: var(--bg-surface-2);
+      padding: 10px 14px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .md-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+    }
+    .md-table tr:last-child td { border-bottom: none; }
+
+    .md-inline-code {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-subtle);
+      direction: ltr;
+      display: inline-block;
+    }
+
+    .code-card {
+      margin: 14px 0;
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--bg-code);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      direction: ltr;
+      text-align: left;
+    }
+
+    .code-header {
+      background: var(--bg-code-header);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #9CA3AF;
+    }
+
+    .code-actions { display: flex; align-items: center; gap: 6px; }
+
+    .code-btn {
+      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      color: #E5E7EB;
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.2s ease;
+    }
+
+    .code-btn:hover { background: rgba(255, 255, 255, 0.16); }
+
+    .code-card pre {
+      padding: 14px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 12.8px;
+      line-height: 1.65;
+      color: #E2E8F0;
+    }
+
+    .tok-kw { color: #7DD3FC; font-weight: 500; }
+    .tok-str { color: #86EFAC; }
+    .tok-num { color: #FCD34D; }
+    .tok-cmt { color: #64748B; font-style: italic; }
+    .tok-fn { color: #F9A8D4; }
+
+    /* Always-On Generative UI Widgets */
+    .genui-card {
+      margin-top: 4px;
+      border-radius: 22px;
+      padding: 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .genui-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .genui-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .genui-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-surface-2);
+      padding: 4px;
+      border-radius: 12px;
+    }
+
+    .genui-tab {
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: 9px;
+      cursor: pointer;
+    }
+
+    .genui-tab.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    }
+
+    .metric-bars { display: flex; flex-direction: column; gap: 10px; }
+    .metric-row { display: flex; flex-direction: column; gap: 5px; }
+    .metric-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 500; }
+    .metric-track { height: 8px; border-radius: 999px; background: var(--bg-surface-2); overflow: hidden; }
+    .metric-fill { height: 100%; border-radius: 999px; background: var(--accent-blue); transition: width 0.5s var(--spring); }
+
+    /* Generated Image Card (When "إنشاء صور" is used) */
+    .gen-image-card {
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+    }
+
+    .gen-image-canvas {
+      height: 210px;
+      width: 100%;
+      background:
+        radial-gradient(circle at 28% 35%, rgba(56, 189, 248, 0.45), transparent 52%),
+        radial-gradient(circle at 75% 65%, rgba(251, 191, 36, 0.32), transparent 50%),
+        linear-gradient(135deg, #0F172A 0%, #1E293B 55%, #0B1120 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .gen-image-caption {
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12.5px;
+      color: var(--text-secondary);
+    }
+
+    /* Interactive Checklist */
+    .genui-check-list { display: flex; flex-direction: column; gap: 8px; }
+    .genui-check-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--bg-surface-2);
+      cursor: pointer;
+      font-size: 13.5px;
+    }
+    .genui-check-box {
+      width: 20px;
+      height: 20px;
+      border-radius: 7px;
+      border: 1.5px solid var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .genui-check-item.done .genui-check-box {
+      background: var(--accent-emerald);
+      border-color: var(--accent-emerald);
+      color: #fff;
+    }
+    .genui-check-item.done .genui-check-text {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    /* ================= CLEAN FLOATING LIQUID GLASS COMPOSER ================= */
+    .composer-wrap {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 10px 16px 18px;
+      z-index: 30;
+      pointer-events: none;
+      display: flex;
+      justify-content: center;
+    }
+
+    .composer-anchor {
+      position: relative;
+      width: 100%;
+      max-width: 760px;
+      pointer-events: auto;
+    }
+
+    /* Plus (+) Floating Liquid Glass Menu */
+    .plus-menu {
+      position: absolute;
+      bottom: calc(100% + 12px);
+      right: 0;
+      width: min(300px, calc(100vw - 32px));
+      border-radius: 26px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 45;
+      opacity: 0;
+      transform: translateY(12px) scale(0.95);
+      transform-origin: bottom right;
+      pointer-events: none;
+      transition: opacity 0.24s ease, transform 0.34s var(--spring-jelly);
+    }
+
+    .plus-menu.open {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .plus-menu-item {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: inherit;
+      padding: 10px 12px;
+      border-radius: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-align: right;
+      transition: background 0.18s ease, transform 0.18s var(--spring);
+    }
+
+    .plus-menu-item:hover { background: rgba(128, 128, 128, 0.16); }
+    .plus-menu-item:active { transform: scale(0.98); }
+
+    .plus-item-left {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .plus-item-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .plus-divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 4px 8px;
+    }
+
+    /* Main Composer Glass Capsule */
+    .composer-glass {
+      width: 100%;
+      border-radius: 30px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Active Mode & Attachment Pills Row (Shown only when active) */
+    .composer-active-strip {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 2px 6px 0;
+    }
+
+    .composer-active-strip.has-items {
+      display: flex;
+    }
+
+    .active-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--accent-blue-soft);
+      color: var(--accent-blue);
+    }
+
+    .active-pill.file-pill {
+      background: var(--bg-surface-2);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .pill-remove {
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      opacity: 0.75;
+    }
+
+    .pill-remove:hover { opacity: 1; }
+
+    /* Clean Single-Row Input Bar */
+    .composer-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    .composer-circle-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border-subtle);
+      background: rgba(128, 128, 128, 0.12);
+      color: var(--text-primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform 0.24s var(--spring-jelly), background 0.2s ease, color 0.2s ease;
+    }
+
+    .composer-circle-btn:hover { background: rgba(128, 128, 128, 0.22); }
+    .composer-circle-btn:active { transform: scale(0.92); }
+    .composer-circle-btn.plus-open { transform: rotate(45deg); background: var(--accent-solid); color: var(--accent-solid-text); }
+    .composer-circle-btn.recording { background: var(--accent-rose-soft); color: var(--accent-rose); border-color: var(--accent-rose); animation: pulseScale 1.2s ease-in-out infinite; }
+
+    .composer-textarea {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 15px;
+      line-height: 1.5;
+      resize: none;
+      min-height: 40px;
+      max-height: 130px;
+      padding: 8px 4px;
+    }
+
+    .composer-textarea::placeholder { color: var(--text-secondary); }
+
+    .composer-right-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .primary-action-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent-solid);
+      color: var(--accent-solid-text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.24s var(--spring-jelly);
+    }
+
+    .primary-action-btn:active { transform: scale(0.92); }
+
+    /* ================= ARTIFACTS SPLIT PANEL ================= */
+    .artifact-panel {
+      width: 0;
+      opacity: 0;
+      overflow: hidden;
+      padding: 0;
+      transition: width 0.36s var(--spring), opacity 0.28s ease, padding 0.36s var(--spring);
+      z-index: 35;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .artifact-panel.open { width: 400px; opacity: 1; padding: 14px 0 14px 14px; }
+
+    @media (max-width: 1024px) {
+      .artifact-panel {
+        position: fixed;
+        inset: 12px;
+        width: auto !important;
+        padding: 0 !important;
+        pointer-events: none;
+        transform: translateY(20px) scale(0.97);
+        transition: opacity 0.28s ease, transform 0.34s var(--spring);
+      }
+      .artifact-panel.open { pointer-events: auto; transform: translateY(0) scale(1); }
+    }
+
+    .artifact-card { flex: 1; border-radius: 26px; display: flex; flex-direction: column; overflow: hidden; }
+    .artifact-head { padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
+    .artifact-body { flex: 1; overflow: auto; padding: 14px; }
+
+    /* ================= OVERLAYS & LIQUID GLASS MODALS ================= */
+    .overlay-scrim {
+      position: fixed;
+      inset: 0;
+      background: var(--scrim-bg);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 50;
+      transition: opacity 0.28s ease;
+    }
+    .overlay-scrim.open { opacity: 1; pointer-events: auto; }
+
+    /* Cintra 4-Model Liquid Glass Picker */
+    .model-modal {
+      position: fixed;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-14px) scale(0.95);
+      width: min(440px, calc(100vw - 28px));
+      border-radius: 30px;
+      padding: 18px;
+      z-index: 60;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.26s ease, transform 0.36s var(--spring-jelly);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .model-modal.open { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0) scale(1); }
+
+    .model-cards { display: flex; flex-direction: column; gap: 8px; }
+
+    .model-item {
+      width: 100%;
+      border-radius: 20px;
+      padding: 12px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-align: right;
+      color: var(--text-primary);
+      font-family: inherit;
+      background: rgba(128, 128, 128, 0.10);
+      border: 1px solid var(--border-subtle);
+      transition: transform 0.24s var(--spring-jelly), background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .model-item:hover { background: rgba(128, 128, 128, 0.18); transform: scale(1.015); }
+    .model-item.selected { background: var(--accent-blue-soft); border-color: var(--accent-blue); }
+
+    /* Google Photos Picker Glass Modal */
+    .photos-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -46%) scale(0.95);
+      width: min(440px, calc(100vw - 28px));
+      border-radius: 30px;
+      padding: 18px;
+      z-index: 65;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.26s ease, transform 0.36s var(--spring-jelly);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .photos-modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+
+    .photos-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .photo-tile {
+      height: 110px;
+      border-radius: 18px;
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: flex-end;
+      padding: 10px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      transition: transform 0.22s var(--spring-jelly);
+    }
+
+    .photo-tile:hover { transform: scale(1.03); }
+
+    /* Cintra Live Voice Mode Overlay (Real-Time Voice Conversation) */
+    .live-voice-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 70;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 20px 44px;
+      background: var(--lg-tint-modal);
+      backdrop-filter: blur(30px) saturate(190%);
+      -webkit-backdrop-filter: blur(30px) saturate(190%);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.32s var(--spring);
+    }
+
+    .live-voice-overlay.open { opacity: 1; pointer-events: auto; }
+
+    .live-orb-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .live-glass-orb {
+      width: 170px;
+      height: 170px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.72), rgba(56, 189, 248, 0.32) 48%, rgba(15, 23, 42, 0.15) 100%);
+      border: 1.5px solid var(--lg-rim-top);
+      box-shadow: 0 24px 60px rgba(56, 189, 248, 0.22), var(--lg-inner-glow);
+      animation: liveBreathe 2.8s ease-in-out infinite;
+    }
+
+    .live-glass-orb.muted {
+      animation: none;
+      opacity: 0.45;
+      transform: scale(0.92);
+    }
+
+    .live-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .live-btn {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-primary);
+      transition: transform 0.24s var(--spring-jelly);
+    }
+
+    .live-btn:active { transform: scale(0.92); }
+    .live-btn.end-call { background: #EF4444; color: #FFFFFF; }
+
+    /* Misc */
+    .toast-pill {
+      position: fixed;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      z-index: 90;
+      padding: 8px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.24s ease, transform 0.3s var(--spring-jelly);
+    }
+    .toast-pill.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .msg-actions { display: flex; align-items: center; gap: 6px; }
+    .msg-action-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .msg-action-btn:hover { background: var(--bg-surface); color: var(--text-primary); }
+
+    .cursor-bar {
+      display: inline-block;
+      width: 7px;
+      height: 15px;
+      background: var(--text-primary);
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-right: 4px;
+      animation: blink 0.85s steps(2) infinite;
+    }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    @keyframes pulseScale { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+    @keyframes liveBreathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.09); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Real SDF Lens Refraction SVG Filters -->
+  <svg width="0" height="0" style="position:absolute;pointer-events:none;" aria-hidden="true">
+    <defs>
+      <filter id="lg-refract" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+        <feImage id="refractMapPill" result="dispMap" preserveAspectRatio="none" />
+        <feDisplacementMap in="SourceGraphic" in2="dispMap" scale="18" xChannelSelector="R" yChannelSelector="G" result="refracted" />
+        <feGaussianBlur in="refracted" stdDeviation="0.4" />
+      </filter>
+      <filter id="lg-refract-modal" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+        <feImage id="refractMapModal" result="dispMapModal" preserveAspectRatio="none" />
+        <feDisplacementMap in="SourceGraphic" in2="dispMapModal" scale="26" xChannelSelector="R" yChannelSelector="G" result="refractedModal" />
+        <feGaussianBlur in="refractedModal" stdDeviation="0.5" />
+      </filter>
+    </defs>
+  </svg>
+
+  <!-- Hidden File Picker for Real File Import -->
+  <input type="file" id="hiddenFileInput" style="display:none;" />
+
+  <div class="workspace">
+    <!-- Glass Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-panel lg-surface">
+        <div class="brand-row">
+          <div class="brand-id">
+            <span class="brand-mark"><i data-lucide="sparkles" width="16" height="16"></i></span>
+            <span>Cintra</span>
+          </div>
+          <button class="msg-action-btn" id="closeSidebarBtn" type="button" aria-label="إغلاق القائمة">
+            <i data-lucide="panel-right-close" width="18" height="18"></i>
+          </button>
+        </div>
+
+        <button class="new-chat-btn" id="newChatSidebarBtn" type="button">
+          <span>محادثة جديدة</span>
+          <i data-lucide="square-pen" width="16" height="16"></i>
+        </button>
+
+        <div class="sidebar-section-label">المحادثات الأخيرة</div>
+        <div class="chat-history" id="chatHistory"></div>
+
+        <div class="sidebar-footer">
+          <span style="font-size:12.5px;color:var(--text-secondary);">المظهر</span>
+          <button class="lg-pill-btn lg-surface" id="themeBtnSidebar" type="button" style="height:34px;padding:0 12px;font-size:12px;">
+            <i data-lucide="sun" width="14" height="14" id="themeIconSidebar"></i>
+            <span id="themeTextSidebar">نهاري</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Chat Column -->
+    <main class="main-column">
+      <!-- Floating Top Bar: Model Selector Centered -->
+      <header class="floating-header">
+        <div class="header-start">
+          <button class="lg-pill-btn lg-surface" id="toggleSidebarBtn" type="button" aria-label="القائمة">
+            <i data-lucide="panel-right-open" width="19" height="19"></i>
+          </button>
+        </div>
+
+        <div class="header-center">
+          <button class="lg-pill-btn lg-surface model-trigger" id="openModelModalBtn" type="button">
+            <span class="model-indicator"></span>
+            <span id="activeModelName">Cintra Pro</span>
+            <i data-lucide="chevron-down" width="16" height="16"></i>
+          </button>
+        </div>
+
+        <div class="header-end">
+          <button class="lg-pill-btn lg-surface" id="themeBtnTop" type="button" title="تبديل الوضع النهاري والليلي">
+            <i data-lucide="sun" width="18" height="18" id="themeIconTop"></i>
+            <span class="theme-pill-label" id="themeTextTop">نهاري</span>
+          </button>
+          <button class="lg-pill-btn lg-surface" id="newChatTopBtn" type="button" title="محادثة جديدة">
+            <i data-lucide="plus" width="19" height="19"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Scrollable Conversation -->
+      <div class="chat-stream" id="chatStream">
+        <div class="chat-inner" id="chatInner"></div>
+      </div>
+
+      <!-- Clean Floating Liquid Glass Composer + Plus (+) Action Menu -->
+      <div class="composer-wrap">
+        <div class="composer-anchor">
+          <!-- Plus (+) Floating Glass Popover -->
+          <div class="plus-menu lg-surface lg-modal-glass" id="plusMenu">
+            <button class="plus-menu-item" type="button" data-plus-action="thinking">
+              <div class="plus-item-left">
+                <span class="plus-item-icon" style="background:var(--accent-blue-soft);color:var(--accent-blue);"><i data-lucide="brain" width="17" height="17"></i></span>
+                <div>
+                  <div style="font-size:13.5px;font-weight:600;">تفكير عميق</div>
+                  <div style="font-size:11.5px;color:var(--text-secondary);">تحليل منطقي خطوة بخطوة</div>
+                </div>
+              </div>
+            </button>
+
+            <button class="plus-menu-item" type="button" data-plus-action="web">
+              <div class="plus-item-left">
+                <span class="plus-item-icon" style="background:var(--accent-emerald-soft);color:var(--accent-emerald);"><i data-lucide="globe" width="17" height="17"></i></span>
+                <div>
+                  <div style="font-size:13.5px;font-weight:600;">بحث ويب مباشر</div>
+                  <div style="font-size:11.5px;color:var(--text-secondary);">جلب أحدث المعلومات والروابط</div>
+                </div>
+              </div>
+            </button>
+
+            <button class="plus-menu-item" type="button" data-plus-action="image">
+              <div class="plus-item-left">
+                <span class="plus-item-icon" style="background:var(--accent-amber-soft);color:var(--accent-amber);"><i data-lucide="wand-2" width="17" height="17"></i></span>
+                <div>
+                  <div style="font-size:13.5px;font-weight:600;">إنشاء صور</div>
+                  <div style="font-size:11.5px;color:var(--text-secondary);">توليد تصميمات ومفاهيم بصرية</div>
+                </div>
+              </div>
+            </button>
+
+            <div class="plus-divider"></div>
+
+            <button class="plus-menu-item" type="button" data-plus-action="gphotos">
+              <div class="plus-item-left">
+                <span class="plus-item-icon" style="background:var(--accent-rose-soft);color:var(--accent-rose);"><i data-lucide="image" width="17" height="17"></i></span>
+                <div>
+                  <div style="font-size:13.5px;font-weight:600;">صور جوجل (Google Photos)</div>
+                  <div style="font-size:11.5px;color:var(--text-secondary);">استيراد صورة مباشرة من مكتبتك</div>
+                </div>
+              </div>
+            </button>
+
+            <button class="plus-menu-item" type="button" data-plus-action="files">
+              <div class="plus-item-left">
+                <span class="plus-item-icon" style="background:rgba(148,163,184,0.18);color:var(--text-primary);"><i data-lucide="folder-up" width="17" height="17"></i></span>
+                <div>
+                  <div style="font-size:13.5px;font-weight:600;">استيراد ملفات ومستندات</div>
+                  <div style="font-size:11.5px;color:var(--text-secondary);">PDF، أكواد Kotlin، أو مستندات</div>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <!-- Main Composer Glass Card -->
+          <div class="composer-glass lg-surface">
+            <div class="composer-active-strip" id="activeStrip"></div>
+
+            <div class="composer-row">
+              <button class="composer-circle-btn" id="plusBtn" type="button" aria-label="أدوات ومرفقات" title="الأدوات والمرفقات">
+                <i data-lucide="plus" width="20" height="20"></i>
+              </button>
+
+              <textarea
+                id="composerInput"
+                class="composer-textarea"
+                rows="1"
+                placeholder="اسأل Cintra أي شيء..."
+              ></textarea>
+
+              <div class="composer-right-controls">
+                <button class="composer-circle-btn" id="micBtn" type="button" aria-label="الميكروفون" title="إملاء صوتي">
+                  <i data-lucide="mic" width="18" height="18"></i>
+                </button>
+
+                <button class="primary-action-btn" id="primaryActionBtn" type="button" aria-label="تحدث مباشر" title="تحدث مباشر مع Cintra">
+                  <i data-lucide="audio-lines" width="20" height="20"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Open UI Artifacts Panel (Always Ready) -->
+    <section class="artifact-panel" id="artifactPanel" aria-label="لوحة المعاينة">
+      <div class="artifact-card lg-surface lg-modal-glass">
+        <div class="artifact-head">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;">
+            <i data-lucide="code-2" width="17" height="17" style="color:var(--accent-blue);"></i>
+            <span id="artifactTitle">معاينة الكود</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="code-btn" id="copyArtifactBtn" type="button">نسخ</button>
+            <button class="msg-action-btn" id="closeArtifactBtn" type="button" aria-label="إغلاق المعاينة">
+              <i data-lucide="x" width="18" height="18"></i>
+            </button>
+          </div>
+        </div>
+        <div class="artifact-body" id="artifactBody"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Scrim -->
+  <div class="overlay-scrim" id="overlayScrim"></div>
+
+  <!-- Cintra 4-Model Liquid Glass Picker -->
+  <section class="model-modal lg-surface lg-modal-glass" id="modelModal" aria-label="اختيار نموذج Cintra">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:15.5px;font-weight:700;">نماذج Cintra</div>
+        <div style="font-size:12px;color:var(--text-secondary);">اختر النموذج الأنسب لمهمتك</div>
+      </div>
+      <button class="msg-action-btn" id="closeModelModalBtn" type="button" aria-label="إغلاق">
+        <i data-lucide="x" width="18" height="18"></i>
+      </button>
+    </div>
+    <div class="model-cards" id="modelCards"></div>
+  </section>
+
+  <!-- Google Photos Glass Picker -->
+  <section class="photos-modal lg-surface lg-modal-glass" id="photosModal" aria-label="صور جوجل">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <i data-lucide="image" width="18" height="18" style="color:var(--accent-rose);"></i>
+        <div>
+          <div style="font-size:15px;font-weight:700;">صور جوجل (Google Photos)</div>
+          <div style="font-size:11.5px;color:var(--text-secondary);">اختر صورة لإرفاقها في المحادثة</div>
+        </div>
+      </div>
+      <button class="msg-action-btn" id="closePhotosBtn" type="button" aria-label="إغلاق">
+        <i data-lucide="x" width="18" height="18"></i>
+      </button>
+    </div>
+    <div class="photos-grid" id="photosGrid"></div>
+  </section>
+
+  <!-- Cintra Live Voice Overlay -->
+  <section class="live-voice-overlay" id="liveVoiceOverlay" aria-label="التحدث المباشر">
+    <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;">
+      <span class="model-indicator"></span>
+      <span id="liveModelTitle">Cintra Live — Cintra Pro</span>
+    </div>
+
+    <div class="live-orb-wrap">
+      <div class="live-glass-orb" id="liveGlassOrb"></div>
+      <div style="text-align:center;">
+        <div id="liveStatusText" style="font-size:18px;font-weight:600;">أستمع إليك الآن...</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:6px;">تحدث بشكل طبيعي بالعربية أو الإنجليزية</div>
+      </div>
+    </div>
+
+    <div class="live-controls">
+      <button class="live-btn lg-surface" id="liveMuteBtn" type="button" title="كتم الميكروفون">
+        <i data-lucide="mic" width="22" height="22" id="liveMuteIcon"></i>
+      </button>
+      <button class="live-btn end-call" id="liveEndBtn" type="button" title="إنهاء التحدث المباشر">
+        <i data-lucide="phone-off" width="22" height="22"></i>
+      </button>
+    </div>
+  </section>
+
+  <!-- Floating Glass Toast -->
+  <div class="toast-pill lg-surface" id="toastPill">تم النسخ</div>
+
+  <script>
+    (function () {
+      /* 1. SDF Rounded-Rect Lens Displacement Maps */
+      function buildLensDisplacementDataURI(w, h, edgeRatio) {
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        const img = ctx.createImageData(w, h);
+        const d = img.data;
+        const border = Math.min(w, h) * edgeRatio;
+
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const dxLeft = x, dxRight = w - 1 - x;
+            const dyTop = y, dyBottom = h - 1 - y;
+            let nx = 0, ny = 0;
+            if (dxLeft < border) nx = Math.pow(1 - dxLeft / border, 1.8);
+            else if (dxRight < border) nx = -Math.pow(1 - dxRight / border, 1.8);
+            if (dyTop < border) ny = Math.pow(1 - dyTop / border, 1.8);
+            else if (dyBottom < border) ny = -Math.pow(1 - dyBottom / border, 1.8);
+
+            const idx = (y * w + x) * 4;
+            d[idx] = Math.round(128 + nx * 127);
+            d[idx + 1] = Math.round(128 + ny * 127);
+            d[idx + 2] = 128;
+            d[idx + 3] = 255;
+          }
+        }
+        ctx.putImageData(img, 0, 0);
+        return c.toDataURL('image/png');
+      }
+
+      document.getElementById('refractMapPill').setAttribute('href', buildLensDisplacementDataURI(160, 64, 0.28));
+      document.getElementById('refractMapModal').setAttribute('href', buildLensDisplacementDataURI(220, 220, 0.16));
+
+      /* 2. Dynamic Specular Rim Light Tracking */
+      document.addEventListener('pointermove', (e) => {
+        document.querySelectorAll('.lg-surface').forEach((el) => {
+          const r = el.getBoundingClientRect();
+          if (e.clientX >= r.left - 40 && e.clientX <= r.right + 40 && e.clientY >= r.top - 40 && e.clientY <= r.bottom + 40) {
+            el.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+            el.style.setProperty('--my', (e.clientY - r.top) + 'px');
+          }
+        });
+      });
+
+      /* 3. Cintra 4 Models & State */
+      const CINTRA_MODELS = [
+        { id: 'cintra-pro', name: 'Cintra Pro', badge: 'الأشمل', desc: 'الأقوى للبرمجة والواجهات التفاعلية والمهام المعقدة' },
+        { id: 'cintra-think', name: 'Cintra Think', badge: 'تفكير عميق', desc: 'تحليل منطقي عميق وحل المشكلات خطوة بخطوة' },
+        { id: 'cintra-core', name: 'Cintra Core', badge: 'سريع', desc: 'استجابة فورية للمحادثات اليومية والكتابة' },
+        { id: 'cintra-vision', name: 'Cintra Vision', badge: 'وسائط', desc: 'فهم متقدم لصور جوجل والملفات والمستندات' }
+      ];
+
+      const GOOGLE_PHOTOS_SAMPLES = [
+        { name: 'UI_Design_Sketch.png', label: 'تصميم واجهة', bg: 'linear-gradient(135deg,#0EA5E9,#1E293B)' },
+        { name: 'Architecture_Board.jpg', label: 'مخطط معماري', bg: 'linear-gradient(135deg,#10B981,#0F172A)' },
+        { name: 'Code_Screenshot.png', label: 'لقطة كود Kotlin', bg: 'linear-gradient(135deg,#334155,#090D16)' },
+        { name: 'Product_Concept.jpg', label: 'صورة منتج', bg: 'linear-gradient(135deg,#D97706,#1E293B)' }
+      ];
+
+      const state = {
+        theme: 'dark',
+        selectedModel: CINTRA_MODELS[0],
+        activeTool: null, // 'thinking' | 'web' | 'image' | null
+        attachments: [],
+        plusMenuOpen: false,
+        isRecordingMic: false,
+        isLiveMuted: false,
+        isGenerating: false,
+        streamTimer: null,
+        micTimer: null,
+        activeArtifactCode: '',
+        activeChatId: 'cintra-demo',
+        chats: [
+          {
+            id: 'cintra-demo',
+            title: 'مراجعة واجهة Cintra الزجاجية',
+            messages: [
+              {
+                id: 'u1',
+                isUser: true,
+                content: 'اعرض لي قدرات Cintra في Markdown والواجهات التفاعلية المدمجة تلقائياً.'
+              },
+              {
+                id: 'a1',
+                isUser: false,
+                model: 'Cintra Pro',
+                expanded: false,
+                reasoning: '1. Markdown الكامل وGenerative UI مفعّلان تلقائياً دائماً في Cintra دون الحاجة لأزرار إضافية.\n2. عرض جدول معماري + كود Kotlin Compose + بطاقة مقارنة تفاعلية بين نماذج Cintra الأربعة.',
+                content: '## تجربة Cintra الموحدة\n\n> كل رد في **Cintra** يدعم **Markdown الكامل** و**Generative UI** و**معاينة Artifacts** تلقائياً، بينما يظل مربع الكتابة نظيفاً مع قائمة `+` للأدوات والوسائط والميكروفون والتحدث المباشر.\n\n| النموذج | الاستخدام الأمثل | الميزة الأساسية |\n| :--- | :--- | :--- |\n| `Cintra Pro` | البرمجة والمشاريع | توازن الذكاء والتنفيذ الدقيق |\n| `Cintra Think` | التحليل العميق | تفكير خطوة بخطوة قبل الإجابة |\n| `Cintra Core` | المهام اليومية | سرعة بث عالية جداً |\n| `Cintra Vision` | الصور والملفات | قراءة صور جوجل والمستندات |\n\n```kotlin\n@Composable\nfun CintraTopModelPill(backdrop: Backdrop, model: String, onClick: () -> Unit) {\n    Row(\n        modifier = Modifier\n            .drawBackdrop(backdrop = backdrop, shape = { CircleShape }) {\n                blur(14.dp.toPx())\n            }\n            .clickable(onClick = onClick)\n            .padding(horizontal = 18.dp, vertical = 10.dp)\n    ) {\n        Text(text = model, fontWeight = FontWeight.SemiBold)\n    }\n}\n```',
+                genUi: {
+                  type: 'comparison',
+                  activeTab: 'speed',
+                  tabs: {
+                    speed: [
+                      { label: 'Cintra Core', value: 98 },
+                      { label: 'Cintra Vision', value: 90 },
+                      { label: 'Cintra Pro', value: 86 },
+                      { label: 'Cintra Think', value: 79 }
+                    ],
+                    reasoning: [
+                      { label: 'Cintra Think', value: 97 },
+                      { label: 'Cintra Pro', value: 95 },
+                      { label: 'Cintra Vision', value: 88 },
+                      { label: 'Cintra Core', value: 82 }
+                    ],
+                    arabic: [
+                      { label: 'Cintra Pro', value: 96 },
+                      { label: 'Cintra Think', value: 94 },
+                      { label: 'Cintra Core', value: 92 },
+                      { label: 'Cintra Vision', value: 91 }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            id: 'cintra-empty',
+            title: 'محادثة جديدة',
+            messages: []
+          }
+        ]
+      };
+
+      /* 4. DOM References */
+      const sidebar = document.getElementById('sidebar');
+      const chatHistory = document.getElementById('chatHistory');
+      const chatStream = document.getElementById('chatStream');
+      const chatInner = document.getElementById('chatInner');
+      const composerInput = document.getElementById('composerInput');
+      const plusBtn = document.getElementById('plusBtn');
+      const plusMenu = document.getElementById('plusMenu');
+      const activeStrip = document.getElementById('activeStrip');
+      const micBtn = document.getElementById('micBtn');
+      const primaryActionBtn = document.getElementById('primaryActionBtn');
+      const activeModelName = document.getElementById('activeModelName');
+      const overlayScrim = document.getElementById('overlayScrim');
+      const modelModal = document.getElementById('modelModal');
+      const modelCards = document.getElementById('modelCards');
+      const photosModal = document.getElementById('photosModal');
+      const photosGrid = document.getElementById('photosGrid');
+      const hiddenFileInput = document.getElementById('hiddenFileInput');
+      const liveVoiceOverlay = document.getElementById('liveVoiceOverlay');
+      const liveGlassOrb = document.getElementById('liveGlassOrb');
+      const liveStatusText = document.getElementById('liveStatusText');
+      const liveModelTitle = document.getElementById('liveModelTitle');
+      const artifactPanel = document.getElementById('artifactPanel');
+      const artifactTitle = document.getElementById('artifactTitle');
+      const artifactBody = document.getElementById('artifactBody');
+      const toastPill = document.getElementById('toastPill');
+
+      let toastTimer = null;
+      function showToast(text) {
+        toastPill.textContent = text;
+        toastPill.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastPill.classList.remove('show'), 1900);
+      }
+
+      function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => showToast('تم النسخ بنجاح')).catch(() => fallbackCopy(text));
+        } else {
+          fallbackCopy(text);
+        }
+      }
+
+      function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); showToast('تم النسخ بنجاح'); } catch (e) { showToast('تعذّر النسخ'); }
+        document.body.removeChild(ta);
+      }
+
+      function esc(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function highlightCode(code) {
+        let h = esc(code);
+        h = h.replace(/(\/\/[^\n]*)/g, '<span class="tok-cmt">$1</span>');
+        h = h.replace(/(".*?")/g, '<span class="tok-str">$1</span>');
+        h = h.replace(/\b(fun|val|var|class|data|return|if|else|when|import|package|object|suspend|override|private)\b/g, '<span class="tok-kw">$1</span>');
+        h = h.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
+        h = h.replace(/(@\w+)/g, '<span class="tok-fn">$1</span>');
+        return h;
+      }
+
+      function formatInline(text) {
+        return esc(text)
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/`([^`]+)`/g, '<span class="md-inline-code">$1</span>');
+      }
+
+      function parseMarkdown(md) {
+        const parts = md.split(/```(\w*)\n([\s\S]*?)```/g);
+        let out = '';
+        for (let i = 0; i < parts.length; i++) {
+          if (i % 3 === 1) {
+            const lang = parts[i] || 'code';
+            const rawCode = (parts[i + 1] || '').trim();
+            const enc = encodeURIComponent(rawCode);
+            out += `
+              <div class="code-card">
+                <div class="code-header">
+                  <span>${esc(lang)}</span>
+                  <div class="code-actions">
+                    <button class="code-btn" type="button" data-open-artifact="${enc}" data-artifact-lang="${esc(lang)}">
+                      <i data-lucide="panel-left-open" width="12" height="12"></i>
+                      <span>معاينة في اللوحة</span>
+                    </button>
+                    <button class="code-btn" type="button" data-copy-code="${enc}">
+                      <i data-lucide="copy" width="12" height="12"></i>
+                      <span>نسخ</span>
+                    </button>
+                  </div>
+                </div>
+                <pre><code>${highlightCode(rawCode)}</code></pre>
+              </div>
+            `;
+            i++;
+            continue;
+          }
+
+          const lines = parts[i].split('\n');
+          let idx = 0;
+          while (idx < lines.length) {
+            const line = lines[idx].trim();
+            if (!line) { idx++; continue; }
+
+            if (line.startsWith('|') && idx + 1 < lines.length && lines[idx + 1].trim().startsWith('|') && lines[idx + 1].includes('---')) {
+              const headers = line.split('|').slice(1, -1).map((c) => formatInline(c.trim()));
+              idx += 2;
+              let rowsHtml = '';
+              while (idx < lines.length && lines[idx].trim().startsWith('|')) {
+                const cells = lines[idx].trim().split('|').slice(1, -1).map((c) => formatInline(c.trim()));
+                rowsHtml += '<tr>' + cells.map((c) => `<td>${c}</td>`).join('') + '</tr>';
+                idx++;
+              }
+              out += `<div class="md-table-wrap"><table class="md-table"><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+              continue;
+            }
+
+            if (line.startsWith('### ')) { out += `<h3>${formatInline(line.slice(4))}</h3>`; idx++; continue; }
+            if (line.startsWith('## ')) { out += `<h2>${formatInline(line.slice(3))}</h2>`; idx++; continue; }
+            if (line.startsWith('> ')) { out += `<blockquote>${formatInline(line.slice(2))}</blockquote>`; idx++; continue; }
+
+            if (line.startsWith('- ')) {
+              let items = '';
+              while (idx < lines.length && lines[idx].trim().startsWith('- ')) {
+                items += `<li>${formatInline(lines[idx].trim().slice(2))}</li>`;
+                idx++;
+              }
+              out += `<ul>${items}</ul>`;
+              continue;
+            }
+
+            out += `<p>${formatInline(line)}</p>`;
+            idx++;
+          }
+        }
+        return out;
+      }
+
+      function renderGenUi(msg) {
+        if (!msg.genUi) return '';
+        const g = msg.genUi;
+
+        if (g.type === 'comparison') {
+          const items = g.tabs[g.activeTab] || g.tabs.speed;
+          return `
+            <div class="genui-card">
+              <div class="genui-top">
+                <span class="genui-title"><i data-lucide="bar-chart-3" width="15" height="15" style="color:var(--accent-blue);"></i> مقارنة أداء نماذج Cintra</span>
+                <div class="genui-tabs">
+                  <button class="genui-tab ${g.activeTab === 'speed' ? 'active' : ''}" type="button" data-genui-tab="${msg.id}:speed">السرعة</button>
+                  <button class="genui-tab ${g.activeTab === 'reasoning' ? 'active' : ''}" type="button" data-genui-tab="${msg.id}:reasoning">التفكير</button>
+                  <button class="genui-tab ${g.activeTab === 'arabic' ? 'active' : ''}" type="button" data-genui-tab="${msg.id}:arabic">العربية</button>
+                </div>
+              </div>
+              <div class="metric-bars">
+                ${items.map((it) => `
+                  <div class="metric-row">
+                    <div class="metric-head">
+                      <span>${esc(it.label)}</span>
+                      <span style="color:var(--accent-blue);font-weight:700;">${it.value}%</span>
+                    </div>
+                    <div class="metric-track"><div class="metric-fill" style="width:${it.value}%;"></div></div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        if (g.type === 'image') {
+          return `
+            <div class="gen-image-card">
+              <div class="gen-image-canvas">
+                <div class="lg-surface" style="padding:14px 22px;border-radius:20px;color:#fff;font-weight:600;font-size:14px;">
+                  معاينة صورة مولّدة بواسطة Cintra Vision
+                </div>
+              </div>
+              <div class="gen-image-caption">
+                <span>${esc(g.prompt)}</span>
+                <button class="code-btn" type="button" data-copy-msg="${msg.id}" style="background:var(--bg-surface-2);color:var(--text-primary);">حفظ الوصف</button>
+              </div>
+            </div>
+          `;
+        }
+
+        if (g.type === 'checklist') {
+          const done = g.items.filter((x) => x.done).length;
+          const pct = Math.round((done / g.items.length) * 100);
+          return `
+            <div class="genui-card">
+              <div class="genui-top">
+                <span class="genui-title"><i data-lucide="list-checks" width="15" height="15" style="color:var(--accent-emerald);"></i> خطة التنفيذ التفاعلية</span>
+                <span style="font-size:12px;font-weight:700;color:var(--accent-emerald);">${done}/${g.items.length} (${pct}%)</span>
+              </div>
+              <div class="genui-check-list">
+                ${g.items.map((item, i) => `
+                  <div class="genui-check-item ${item.done ? 'done' : ''}" data-genui-check="${msg.id}:${i}">
+                    <span class="genui-check-box">${item.done ? '<i data-lucide="check" width="13" height="13"></i>' : ''}</span>
+                    <span class="genui-check-text">${esc(item.text)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+        return '';
+      }
+
+      function getActiveChat() {
+        return state.chats.find((c) => c.id === state.activeChatId) || state.chats[0];
+      }
+
+      function updateThemeUI() {
+        document.documentElement.setAttribute('data-theme', state.theme);
+        const isDark = state.theme === 'dark';
+        const iconName = isDark ? 'sun' : 'moon';
+        const label = isDark ? 'نهاري' : 'ليلي';
+        document.getElementById('themeTextTop').textContent = label;
+        document.getElementById('themeTextSidebar').textContent = label;
+        document.getElementById('themeIconTop').setAttribute('data-lucide', iconName);
+        document.getElementById('themeIconSidebar').setAttribute('data-lucide', iconName);
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function toggleTheme() {
+        state.theme = state.theme === 'dark' ? 'light' : 'dark';
+        updateThemeUI();
+        showToast(state.theme === 'dark' ? 'الوضع الليلي' : 'الوضع النهاري');
+      }
+
+      function renderActiveStrip() {
+        const items = [];
+        const toolMeta = {
+          thinking: { label: 'تفكير عميق', icon: 'brain' },
+          web: { label: 'بحث ويب', icon: 'globe' },
+          image: { label: 'إنشاء صور', icon: 'wand-2' }
+        };
+
+        if (state.activeTool && toolMeta[state.activeTool]) {
+          const t = toolMeta[state.activeTool];
+          items.push(`
+            <span class="active-pill">
+              <i data-lucide="${t.icon}" width="13" height="13"></i>
+              <span>${t.label}</span>
+              <button class="pill-remove" type="button" data-clear-tool="1" aria-label="إزالة"><i data-lucide="x" width="13" height="13"></i></button>
+            </span>
+          `);
+        }
+
+        state.attachments.forEach((att, idx) => {
+          items.push(`
+            <span class="active-pill file-pill">
+              <i data-lucide="${att.type === 'photo' ? 'image' : 'file-text'}" width="13" height="13"></i>
+              <span>${esc(att.name)}</span>
+              <button class="pill-remove" type="button" data-remove-att="${idx}" aria-label="حذف"><i data-lucide="x" width="13" height="13"></i></button>
+            </span>
+          `);
+        });
+
+        activeStrip.innerHTML = items.join('');
+        activeStrip.classList.toggle('has-items', items.length > 0);
+        if (window.lucide) lucide.createIcons();
+        updatePrimaryActionBtn();
+      }
+
+      function updatePrimaryActionBtn() {
+        if (state.isGenerating) {
+          primaryActionBtn.setAttribute('aria-label', 'إيقاف');
+          primaryActionBtn.title = 'إيقاف التوليد';
+          primaryActionBtn.innerHTML = '<i data-lucide="square" width="15" height="15"></i>';
+        } else if (composerInput.value.trim().length > 0 || state.attachments.length > 0) {
+          primaryActionBtn.setAttribute('aria-label', 'إرسال');
+          primaryActionBtn.title = 'إرسال الرسالة';
+          primaryActionBtn.innerHTML = '<i data-lucide="arrow-up" width="20" height="20"></i>';
+        } else {
+          primaryActionBtn.setAttribute('aria-label', 'تحدث مباشر');
+          primaryActionBtn.title = 'تحدث مباشر مع Cintra';
+          primaryActionBtn.innerHTML = '<i data-lucide="audio-lines" width="20" height="20"></i>';
+        }
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function renderSidebar() {
+        chatHistory.innerHTML = '';
+        state.chats.forEach((c) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'history-btn' + (c.id === state.activeChatId ? ' active' : '');
+          btn.innerHTML = `<span class="history-title">${esc(c.title)}</span><i data-lucide="message-square" width="14" height="14"></i>`;
+          btn.addEventListener('click', () => {
+            stopStream();
+            state.activeChatId = c.id;
+            closeAllOverlays();
+            renderSidebar();
+            renderChat();
+          });
+          chatHistory.appendChild(btn);
+        });
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function renderModelPicker() {
+        modelCards.innerHTML = '';
+        CINTRA_MODELS.forEach((m) => {
+          const selected = m.id === state.selectedModel.id;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'model-item' + (selected ? ' selected' : '');
+          btn.innerHTML = `
+            <div>
+              <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;">
+                <span>${esc(m.name)}</span>
+                <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--bg-surface);color:var(--text-secondary);">${esc(m.badge)}</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">${esc(m.desc)}</div>
+            </div>
+            ${selected ? '<i data-lucide="check-circle-2" width="19" height="19" style="color:var(--accent-blue);"></i>' : ''}
+          `;
+          btn.addEventListener('click', () => {
+            state.selectedModel = m;
+            activeModelName.textContent = m.name;
+            liveModelTitle.textContent = 'Cintra Live — ' + m.name;
+            closeAllOverlays();
+            renderModelPicker();
+            showToast('تم التبديل إلى ' + m.name);
+          });
+          modelCards.appendChild(btn);
+        });
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function renderGooglePhotosPicker() {
+        photosGrid.innerHTML = '';
+        GOOGLE_PHOTOS_SAMPLES.forEach((p) => {
+          const tile = document.createElement('button');
+          tile.type = 'button';
+          tile.className = 'photo-tile';
+          tile.style.background = p.bg;
+          tile.innerHTML = `<span>${esc(p.label)} (${esc(p.name)})</span>`;
+          tile.addEventListener('click', () => {
+            state.attachments.push({ type: 'photo', name: p.name });
+            closeAllOverlays();
+            renderActiveStrip();
+            showToast('تم استيراد الصورة من صور جوجل');
+          });
+          photosGrid.appendChild(tile);
+        });
+      }
+
+      function renderChat() {
+        const chat = getActiveChat();
+        chatInner.innerHTML = '';
+
+        if (chat.messages.length === 0) {
+          const box = document.createElement('div');
+          box.className = 'welcome-box';
+          box.innerHTML = `
+            <div class="welcome-orb lg-surface">
+              <i data-lucide="sparkles" width="28" height="28" style="color:var(--accent-blue);"></i>
+            </div>
+            <h1 style="font-size:25px;font-weight:700;">مرحباً بك في Cintra</h1>
+            <p style="font-size:14px;color:var(--text-secondary);max-width:380px;line-height:1.6;">
+              اضغط على <strong>+</strong> لفتح أدوات البحث والتفكير وإنشاء الصور واستيراد ملفاتك، أو اضغط أيقونة الموجات للتحدث المباشر.
+            </p>
+            <div class="welcome-grid" id="welcomeGrid"></div>
+          `;
+          chatInner.appendChild(box);
+
+          const prompts = [
+            { tag: 'خطة تفاعلية', icon: 'list-checks', text: 'اعمل لي خطة تنفيذ تفاعلية لبناء تطبيق Cintra بـ Kotlin' },
+            { tag: 'إنشاء صور', icon: 'wand-2', text: 'أنشئ لي تصوراً بصرياً لواجهة تطبيق زجاجي عصري' },
+            { tag: 'كود + جدول', icon: 'code-2', text: 'اكتب كود Ktor SSE مع جدول مقارنة للطبقات' }
+          ];
+          const grid = box.querySelector('#welcomeGrid');
+          prompts.forEach((p) => {
+            const tile = document.createElement('button');
+            tile.type = 'button';
+            tile.className = 'prompt-tile';
+            tile.innerHTML = `
+              <span class="prompt-tile-tag"><i data-lucide="${p.icon}" width="13" height="13"></i> ${p.tag}</span>
+              <span style="font-size:13.5px;line-height:1.5;">${p.text}</span>
+            `;
+            tile.addEventListener('click', () => sendMessage(p.text));
+            grid.appendChild(tile);
+          });
+          if (window.lucide) lucide.createIcons();
+          return;
+        }
+
+        chat.messages.forEach((msg) => {
+          if (msg.isUser) {
+            const row = document.createElement('div');
+            row.className = 'user-row';
+            const attHtml = (msg.attachments || []).map((a) =>
+              `<span class="user-attach-badge"><i data-lucide="${a.type === 'photo' ? 'image' : 'file-text'}" width="13" height="13"></i> ${esc(a.name)}</span>`
+            ).join('');
+            row.innerHTML = `<div class="user-bubble">${attHtml}<div>${esc(msg.content)}</div></div>`;
+            chatInner.appendChild(row);
+          } else {
+            const row = document.createElement('div');
+            row.className = 'ai-row';
+
+            const thinkingHtml = msg.reasoning ? `
+              <div class="thinking-box ${msg.expanded ? 'expanded' : ''}">
+                <button class="thinking-trigger" type="button" data-toggle-think="${msg.id}">
+                  <span class="thinking-title">
+                    <i data-lucide="brain" width="15" height="15" style="color:var(--accent-blue);"></i>
+                    <span>${msg.isStreaming && !msg.content ? 'جارٍ التفكير...' : 'عملية التفكير'}</span>
+                  </span>
+                  <i data-lucide="${msg.expanded ? 'chevron-up' : 'chevron-down'}" width="16" height="16"></i>
+                </button>
+                <div class="thinking-content-wrap">
+                  <div class="thinking-content"><div class="thinking-inner">${esc(msg.reasoning)}</div></div>
+                </div>
+              </div>
+            ` : '';
+
+            const cursor = msg.isStreaming ? '<span class="cursor-bar"></span>' : '';
+            const genUiHtml = !msg.isStreaming ? renderGenUi(msg) : '';
+            const actionsHtml = !msg.isStreaming ? `
+              <div class="msg-actions">
+                <button class="msg-action-btn" type="button" data-copy-msg="${msg.id}"><i data-lucide="copy" width="14" height="14"></i><span>نسخ</span></button>
+                <button class="msg-action-btn" type="button" data-regen-msg="${msg.id}"><i data-lucide="refresh-cw" width="14" height="14"></i><span>إعادة</span></button>
+              </div>
+            ` : '';
+
+            row.innerHTML = `
+              <div class="ai-header">
+                <span class="ai-badge"><i data-lucide="sparkles" width="13" height="13"></i></span>
+                <span>${esc(msg.model || state.selectedModel.name)}</span>
+              </div>
+              ${thinkingHtml}
+              <div class="md-body">${parseMarkdown(msg.content)}${cursor}</div>
+              ${genUiHtml}
+              ${actionsHtml}
+            `;
+            chatInner.appendChild(row);
+          }
+        });
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function stopStream() {
+        if (state.streamTimer) { clearInterval(state.streamTimer); state.streamTimer = null; }
+        if (state.isGenerating) {
+          state.isGenerating = false;
+          const chat = getActiveChat();
+          const last = chat.messages[chat.messages.length - 1];
+          if (last && !last.isUser) last.isStreaming = false;
+          renderChat();
+          updatePrimaryActionBtn();
+        }
+      }
+
+      function buildReply(prompt, toolUsed) {
+        const lower = prompt.toLowerCase();
+        if (toolUsed === 'image' || lower.includes('صور') || lower.includes('تصور')) {
+          return {
+            reasoning: 'تفعيل محرك الصور في Cintra Vision وتوليد مفهوم بصري نظيف بدون نيون.',
+            content: 'تم توليد التصور البصري المطلوب عبر **' + state.selectedModel.name + '**:',
+            genUi: { type: 'image', prompt: prompt }
+          };
+        }
+        if (lower.includes('خطة') || lower.includes('مهام')) {
+          return {
+            reasoning: 'تقسيم بناء تطبيق Cintra على مراحل واضحة وتضمين قائمة مهام تفاعلية تلقائياً.',
+            content: '### خارطة طريق بناء Cintra (Android Kotlin Compose)\n\n> يمكنك الضغط على كل مهمة بالأسفل لتتبع التقدم الفعلي:',
+            genUi: {
+              type: 'checklist',
+              items: [
+                { text: 'تهيئة مشروع Gradle + Jetpack Compose Material 3', done: true },
+                { text: 'دمج AndroidLiquidGlass وHaze للشرائط العائمة والنماذج', done: false },
+                { text: 'تفعيل قائمة + (بحث، تفكير، صور جوجل، ملفات) والميكروفون', done: false },
+                { text: 'ربط Ktor SSE Streaming وواجهة Cintra Live الصوتية', done: false }
+              ]
+            }
+          };
+        }
+        return {
+          reasoning: (toolUsed === 'web' ? 'بحث ويب مباشر وتجميع أحدث المصادر...\n' : '') + 'تحليل الطلب عبر ' + state.selectedModel.name + ' وتنسيق الرد بـ Markdown الكامل.',
+          content: '### رد ' + state.selectedModel.name + (toolUsed === 'web' ? ' (مدعوم ببحث الويب)' : '') + '\n\n| الطبقة | المكتبة المقترحة في Android | الدور |\n| :--- | :--- | :--- |\n| الزجاج السائل | `AndroidLiquidGlass` | انكسار بصري حقيقي |\n| التضبيب السريع | `Haze` | تضبيب القوائم والخلفيات |\n| الشبكة | `Ktor Client SSE` | بث مباشر للردود |\n\n```kotlin\nfun streamCintra(client: HttpClient): Flow<String> = flow {\n    client.sse("https://api.cintra.ai/v1/chat/completions") {\n        incoming.collect { event ->\n            event.data?.takeIf { it != "[DONE]" }?.let { emit(it) }\n        }\n    }\n}\n```',
+          genUi: null
+        };
+      }
+
+      function sendMessage(forced) {
+        if (state.isGenerating) { stopStream(); return; }
+        const text = (typeof forced === 'string' ? forced : composerInput.value).trim();
+        if (!text && state.attachments.length === 0) return;
+
+        const usedTool = state.activeTool;
+        const usedAttachments = [...state.attachments];
+        const finalPrompt = text || ('تحليل المرفق: ' + usedAttachments.map((a) => a.name).join('، '));
+
+        const chat = getActiveChat();
+        if (chat.messages.length === 0) {
+          chat.title = finalPrompt.slice(0, 28) + (finalPrompt.length > 28 ? '...' : '');
+          renderSidebar();
+        }
+
+        chat.messages.push({
+          id: 'u-' + Date.now(),
+          isUser: true,
+          content: finalPrompt,
+          attachments: usedAttachments
+        });
+
+        composerInput.value = '';
+        composerInput.style.height = 'auto';
+        state.attachments = [];
+        closePlusMenu();
+        renderActiveStrip();
+
+        const shouldShowThinking = usedTool === 'thinking' || state.selectedModel.id === 'cintra-think';
+        const payload = buildReply(finalPrompt, usedTool);
+
+        const aiMsg = {
+          id: 'a-' + Date.now(),
+          isUser: false,
+          model: state.selectedModel.name,
+          reasoning: shouldShowThinking ? '' : null,
+          expanded: shouldShowThinking,
+          content: '',
+          genUi: payload.genUi,
+          isStreaming: true
+        };
+        chat.messages.push(aiMsg);
+        state.isGenerating = true;
+        renderChat();
+        chatStream.scrollTop = chatStream.scrollHeight;
+        updatePrimaryActionBtn();
+
+        const rChars = shouldShowThinking ? Array.from(payload.reasoning) : [];
+        const cChars = Array.from(payload.content);
+        let ri = 0, ci = 0;
+
+        state.streamTimer = setInterval(() => {
+          if (ri < rChars.length) {
+            aiMsg.reasoning += rChars.slice(ri, ri + 5).join('');
+            ri += 5;
+            if (ri >= rChars.length) aiMsg.expanded = false;
+          } else if (ci < cChars.length) {
+            aiMsg.content += cChars.slice(ci, ci + 7).join('');
+            ci += 7;
+          } else {
+            stopStream();
+            return;
+          }
+          renderChat();
+          chatStream.scrollTop = chatStream.scrollHeight;
+        }, 22);
+      }
+
+      /* Plus Menu & Overlays */
+      function togglePlusMenu() {
+        state.plusMenuOpen = !state.plusMenuOpen;
+        plusMenu.classList.toggle('open', state.plusMenuOpen);
+        plusBtn.classList.toggle('plus-open', state.plusMenuOpen);
+      }
+
+      function closePlusMenu() {
+        state.plusMenuOpen = false;
+        plusMenu.classList.remove('open');
+        plusBtn.classList.remove('plus-open');
+      }
+
+      function closeAllOverlays() {
+        modelModal.classList.remove('open');
+        photosModal.classList.remove('open');
+        sidebar.classList.remove('mobile-open');
+        overlayScrim.classList.remove('open');
+        closePlusMenu();
+      }
+
+      /* Event Bindings */
+      plusBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePlusMenu();
+      });
+
+      document.addEventListener('click', (e) => {
+        if (state.plusMenuOpen && !plusMenu.contains(e.target) && !plusBtn.contains(e.target)) {
+          closePlusMenu();
+        }
+      });
+
+      plusMenu.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-plus-action]');
+        if (!item) return;
+        const action = item.getAttribute('data-plus-action');
+        closePlusMenu();
+
+        if (action === 'thinking' || action === 'web' || action === 'image') {
+          state.activeTool = state.activeTool === action ? null : action;
+          renderActiveStrip();
+        } else if (action === 'gphotos') {
+          photosModal.classList.add('open');
+          overlayScrim.classList.add('open');
+        } else if (action === 'files') {
+          hiddenFileInput.click();
+        }
+      });
+
+      hiddenFileInput.addEventListener('change', () => {
+        if (hiddenFileInput.files && hiddenFileInput.files.length > 0) {
+          const f = hiddenFileInput.files[0];
+          state.attachments.push({ type: 'file', name: f.name });
+          hiddenFileInput.value = '';
+          renderActiveStrip();
+          showToast('تم إرفاق ' + f.name);
+        }
+      });
+
+      activeStrip.addEventListener('click', (e) => {
+        if (e.target.closest('[data-clear-tool]')) {
+          state.activeTool = null;
+          renderActiveStrip();
+          return;
+        }
+        const rem = e.target.closest('[data-remove-att]');
+        if (rem) {
+          state.attachments.splice(parseInt(rem.getAttribute('data-remove-att'), 10), 1);
+          renderActiveStrip();
+        }
+      });
+
+      /* Mic Dictation Simulation */
+      micBtn.addEventListener('click', () => {
+        if (state.isRecordingMic) {
+          clearTimeout(state.micTimer);
+          state.isRecordingMic = false;
+          micBtn.classList.remove('recording');
+          return;
+        }
+        state.isRecordingMic = true;
+        micBtn.classList.add('recording');
+        showToast('جارٍ الاستماع لصوتك...');
+        state.micTimer = setTimeout(() => {
+          state.isRecordingMic = false;
+          micBtn.classList.remove('recording');
+          composerInput.value = (composerInput.value ? composerInput.value + ' ' : '') + 'اعمل لي خطة تنفيذ تفاعلية لبناء تطبيق Cintra بـ Kotlin';
+          composerInput.style.height = 'auto';
+          composerInput.style.height = Math.min(composerInput.scrollHeight, 130) + 'px';
+          updatePrimaryActionBtn();
+          showToast('تم تحويل الصوت إلى نص');
+        }, 1600);
+      });
+
+      /* Primary Action: Live Voice (when empty) vs Send (when typing) vs Stop (when streaming) */
+      primaryActionBtn.addEventListener('click', () => {
+        if (state.isGenerating) {
+          stopStream();
+        } else if (composerInput.value.trim().length > 0 || state.attachments.length > 0) {
+          sendMessage();
+        } else {
+          liveVoiceOverlay.classList.add('open');
+          state.isLiveMuted = false;
+          liveGlassOrb.classList.remove('muted');
+          liveStatusText.textContent = 'أستمع إليك الآن...';
+        }
+      });
+
+      document.getElementById('liveMuteBtn').addEventListener('click', () => {
+        state.isLiveMuted = !state.isLiveMuted;
+        liveGlassOrb.classList.toggle('muted', state.isLiveMuted);
+        liveStatusText.textContent = state.isLiveMuted ? 'الميكروفون مكتوم' : 'أستمع إليك الآن...';
+        document.getElementById('liveMuteIcon').setAttribute('data-lucide', state.isLiveMuted ? 'mic-off' : 'mic');
+        if (window.lucide) lucide.createIcons();
+      });
+
+      document.getElementById('liveEndBtn').addEventListener('click', () => {
+        liveVoiceOverlay.classList.remove('open');
+        showToast('تم إنهاء التحدث المباشر');
+      });
+
+      /* Top Bar, Sidebar, Modals, Artifacts */
+      document.getElementById('toggleSidebarBtn').addEventListener('click', () => {
+        if (window.innerWidth <= 920) {
+          sidebar.classList.toggle('mobile-open');
+          overlayScrim.classList.toggle('open', sidebar.classList.contains('mobile-open'));
+        } else {
+          sidebar.classList.toggle('collapsed');
+        }
+      });
+
+      document.getElementById('closeSidebarBtn').addEventListener('click', () => {
+        if (window.innerWidth <= 920) closeAllOverlays();
+        else sidebar.classList.add('collapsed');
+      });
+
+      document.getElementById('openModelModalBtn').addEventListener('click', () => {
+        closePlusMenu();
+        modelModal.classList.add('open');
+        overlayScrim.classList.add('open');
+      });
+
+      document.getElementById('closeModelModalBtn').addEventListener('click', closeAllOverlays);
+      document.getElementById('closePhotosBtn').addEventListener('click', closeAllOverlays);
+      overlayScrim.addEventListener('click', closeAllOverlays);
+
+      document.getElementById('themeBtnTop').addEventListener('click', toggleTheme);
+      document.getElementById('themeBtnSidebar').addEventListener('click', toggleTheme);
+
+      function startNewChat() {
+        stopStream();
+        const id = 'c-' + Date.now();
+        state.chats.unshift({ id, title: 'محادثة جديدة', messages: [] });
+        state.activeChatId = id;
+        closeAllOverlays();
+        renderSidebar();
+        renderChat();
+        updatePrimaryActionBtn();
+      }
+      document.getElementById('newChatTopBtn').addEventListener('click', startNewChat);
+      document.getElementById('newChatSidebarBtn').addEventListener('click', startNewChat);
+
+      composerInput.addEventListener('input', () => {
+        composerInput.style.height = 'auto';
+        composerInput.style.height = Math.min(composerInput.scrollHeight, 130) + 'px';
+        updatePrimaryActionBtn();
+      });
+
+      composerInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+
+      document.getElementById('closeArtifactBtn').addEventListener('click', () => artifactPanel.classList.remove('open'));
+      document.getElementById('copyArtifactBtn').addEventListener('click', () => copyToClipboard(state.activeArtifactCode));
+
+      chatInner.addEventListener('click', (e) => {
+        const thinkBtn = e.target.closest('[data-toggle-think]');
+        if (thinkBtn) {
+          const msg = getActiveChat().messages.find((m) => m.id === thinkBtn.getAttribute('data-toggle-think'));
+          if (msg) { msg.expanded = !msg.expanded; renderChat(); }
+          return;
+        }
+
+        const copyCodeBtn = e.target.closest('[data-copy-code]');
+        if (copyCodeBtn) {
+          copyToClipboard(decodeURIComponent(copyCodeBtn.getAttribute('data-copy-code')));
+          return;
+        }
+
+        const artifactBtn = e.target.closest('[data-open-artifact]');
+        if (artifactBtn) {
+          const code = decodeURIComponent(artifactBtn.getAttribute('data-open-artifact'));
+          const lang = artifactBtn.getAttribute('data-artifact-lang') || 'code';
+          state.activeArtifactCode = code;
+          artifactTitle.textContent = 'Artifact — ' + lang.toUpperCase();
+          artifactBody.innerHTML = `<div class="code-card" style="margin:0;"><div class="code-header"><span>${esc(lang)}</span><span>Live Preview</span></div><pre><code>${highlightCode(code)}</code></pre></div>`;
+          artifactPanel.classList.add('open');
+          return;
+        }
+
+        const genTab = e.target.closest('[data-genui-tab]');
+        if (genTab) {
+          const [msgId, tabKey] = genTab.getAttribute('data-genui-tab').split(':');
+          const msg = getActiveChat().messages.find((m) => m.id === msgId);
+          if (msg && msg.genUi) { msg.genUi.activeTab = tabKey; renderChat(); }
+          return;
+        }
+
+        const genCheck = e.target.closest('[data-genui-check]');
+        if (genCheck) {
+          const [msgId, idx] = genCheck.getAttribute('data-genui-check').split(':');
+          const msg = getActiveChat().messages.find((m) => m.id === msgId);
+          if (msg && msg.genUi && msg.genUi.items[idx]) {
+            msg.genUi.items[idx].done = !msg.genUi.items[idx].done;
+            renderChat();
+          }
+          return;
+        }
+
+        const copyMsg = e.target.closest('[data-copy-msg]');
+        if (copyMsg) {
+          const msg = getActiveChat().messages.find((m) => m.id === copyMsg.getAttribute('data-copy-msg'));
+          if (msg) copyToClipboard(msg.content);
+          return;
+        }
+
+        const regenMsg = e.target.closest('[data-regen-msg]');
+        if (regenMsg && !state.isGenerating) {
+          const chat = getActiveChat();
+          const idx = chat.messages.findIndex((m) => m.id === regenMsg.getAttribute('data-regen-msg'));
+          if (idx > 0) {
+            const prevPrompt = chat.messages[idx - 1].content;
+            chat.messages.splice(idx, 1);
+            renderChat();
+            sendMessage(prevPrompt);
+          }
+        }
+      });
+
+      // Init
+      updateThemeUI();
+      renderSidebar();
+      renderModelPicker();
+      renderGooglePhotosPicker();
+      renderChat();
+      renderActiveStrip();
+    })();
+  </script>
+</body>
+</html>

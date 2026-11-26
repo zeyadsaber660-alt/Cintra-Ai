@@ -1,0 +1,5 @@
+{
+  "name": "cintra-ai-worker",
+  "private": true,
+  "type": "module"
+}

@@ -1,0 +1,13 @@
+name = "cintra-ai-worker"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# Create a KV namespace with: wrangler kv namespace create CINTRA_CONFIG
+# Then replace the placeholder id below before running `wrangler deploy`.
+[[kv_namespaces]]
+binding = "CINTRA_CONFIG"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# Set secrets securely (never commit keys):
+#   wrangler secret put ADMIN_SECRET
+#   wrangler secret put APP_TOKEN
