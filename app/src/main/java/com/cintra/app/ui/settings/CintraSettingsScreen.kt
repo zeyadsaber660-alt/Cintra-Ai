@@ -63,6 +63,9 @@ fun CintraSettingsScreen(
     backdrop: Backdrop,
     hazeState: HazeState,
     userName: String,
+    authModeLabel: String,
+    fontScale: Float,
+    responseTone: String,
     darkTheme: Boolean,
     isArabic: Boolean,
     autoWebSearch: Boolean,
@@ -73,6 +76,10 @@ fun CintraSettingsScreen(
     onSetArabic: (Boolean) -> Unit,
     onToggleAutoWebSearch: () -> Unit,
     onToggleIllustrativeImages: () -> Unit,
+    onSetFontScale: (Float) -> Unit,
+    onSetResponseTone: (String) -> Unit,
+    onSwitchAuthMode: () -> Unit,
+    onTestSamplePdf: () -> Unit,
     onOpenCustomize: () -> Unit,
     onClearAllChats: () -> Unit,
     onShowToast: (String) -> Unit,
@@ -82,6 +89,8 @@ fun CintraSettingsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var themeMenuOpen by remember { mutableStateOf(false) }
     var langMenuOpen by remember { mutableStateOf(false) }
+    var fontMenuOpen by remember { mutableStateOf(false) }
+    var toneMenuOpen by remember { mutableStateOf(false) }
 
     val initials = remember(userName) {
         userName.trim().split(" ").filter { it.isNotEmpty() }.take(2)
@@ -131,9 +140,15 @@ fun CintraSettingsScreen(
                                         Text(initials, color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     }
                                 },
-                                title = if (isArabic) "الملف الشخصي" else "Local Profile",
+                                title = if (isArabic) "الحساب ($authModeLabel)" else "Account ($authModeLabel)",
                                 trailingValue = userName,
                                 onClick = onOpenCustomize,
+                            )
+                            SettingsDivider()
+                            SettingsRowItem(
+                                icon = CintraIcons.SwitchAccount,
+                                title = if (isArabic) "تغيير طريقة الدخول (ضيف / Google / بريد)" else "Switch Sign-in Mode",
+                                onClick = onSwitchAuthMode,
                             )
                             SettingsDivider()
                             SettingsRowItem(
@@ -169,6 +184,29 @@ fun CintraSettingsScreen(
                                 title = if (isArabic) "اللغة والاتجاه" else "Language",
                                 trailingValue = if (isArabic) "العربية (RTL)" else "English (LTR)",
                                 onClick = { langMenuOpen = true },
+                            )
+                            SettingsDivider()
+                        }
+                        if (matches("الخط", "حجم", "font", "size")) {
+                            val fontLabel = when {
+                                fontScale < 0.95f -> if (isArabic) "صغير" else "Small"
+                                fontScale > 1.05f -> if (isArabic) "كبير" else "Large"
+                                else -> if (isArabic) "متوسط" else "Medium"
+                            }
+                            SettingsRowItem(
+                                icon = CintraIcons.Sliders,
+                                title = if (isArabic) "حجم خط المحادثة" else "Chat Font Size",
+                                trailingValue = fontLabel,
+                                onClick = { fontMenuOpen = true },
+                            )
+                            SettingsDivider()
+                        }
+                        if (matches("النبرة", "أسلوب", "tone", "style")) {
+                            SettingsRowItem(
+                                icon = CintraIcons.Sparkle,
+                                title = if (isArabic) "نبرة وأسلوب Cintra" else "Response Tone",
+                                trailingValue = responseTone,
+                                onClick = { toneMenuOpen = true },
                             )
                             SettingsDivider()
                         }
@@ -214,6 +252,13 @@ fun CintraSettingsScreen(
                                 subtitle = if (isArabic) "اتصال مشفّر بالكامل دون تخزين مفاتيح على الجهاز" else "End-to-end secured proxy with zero keys on device",
                                 showChevron = false,
                                 onClick = {},
+                            )
+                            SettingsDivider()
+                            SettingsRowItem(
+                                icon = CintraIcons.Folder,
+                                title = if (isArabic) "اختبار تصدير تقرير PDF عربي (RTL)" else "Test Arabic RTL PDF Export",
+                                subtitle = if (isArabic) "توليد فاتورة عربية بخط Cairo وحفظها كـ PDF" else "Generate sample Arabic report with Cairo font",
+                                onClick = onTestSamplePdf,
                             )
                             SettingsDivider()
                             SettingsRowItem(
@@ -346,6 +391,43 @@ fun CintraSettingsScreen(
                 selectedValue = isArabic,
                 onSelect = { onSetArabic(it); langMenuOpen = false },
                 onDismiss = { langMenuOpen = false },
+                alignment = Alignment.Center,
+                transformOrigin = TransformOrigin.Center,
+                topPadding = 0.dp,
+            )
+
+            HyperOsGlassSelectionMenu(
+                backdrop = backdrop,
+                hazeState = hazeState,
+                visible = fontMenuOpen,
+                title = if (isArabic) "حجم خط المحادثة" else "Chat Font Size",
+                options = listOf(
+                    HyperOsMenuOption(0.90f, if (isArabic) "صغير" else "Small", if (isArabic) "عرض محتوى أكثر على الشاشة" else "Compact reading"),
+                    HyperOsMenuOption(1.00f, if (isArabic) "متوسط (موصى به)" else "Medium (Default)", if (isArabic) "توازن مريح للقراءة" else "Balanced readability"),
+                    HyperOsMenuOption(1.14f, if (isArabic) "كبير" else "Large", if (isArabic) "وضوح أعلى للنصوص العربية" else "Larger text"),
+                ),
+                selectedValue = fontScale,
+                onSelect = { onSetFontScale(it); fontMenuOpen = false },
+                onDismiss = { fontMenuOpen = false },
+                alignment = Alignment.Center,
+                transformOrigin = TransformOrigin.Center,
+                topPadding = 0.dp,
+            )
+
+            HyperOsGlassSelectionMenu(
+                backdrop = backdrop,
+                hazeState = hazeState,
+                visible = toneMenuOpen,
+                title = if (isArabic) "نبرة وأسلوب الرد" else "Response Tone",
+                options = listOf(
+                    HyperOsMenuOption("متوازن", "متوازن", "توضيح طبيعي وعملي"),
+                    HyperOsMenuOption("احترافي", "احترافي", "أسلوب رسمي ومنظم للتقارير والعمل"),
+                    HyperOsMenuOption("مختصر", "مختصر وسريع", "إجابات مباشرة بدون إطالة"),
+                    HyperOsMenuOption("تعليمي", "تعليمي مبسط", "شرح خطوة بخطوة بأمثلة وجداول"),
+                ),
+                selectedValue = responseTone,
+                onSelect = { onSetResponseTone(it); toneMenuOpen = false },
+                onDismiss = { toneMenuOpen = false },
                 alignment = Alignment.Center,
                 transformOrigin = TransformOrigin.Center,
                 topPadding = 0.dp,

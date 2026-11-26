@@ -11,8 +11,8 @@ android {
         applicationId = "com.cintra.app"
         minSdk = 31
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 4
+        versionName = "4.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -58,22 +58,20 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Liquid Glass backdrop (real shader-based optical refraction)
+    // Liquid Glass backdrop & Haze
     implementation("io.github.kyant0:backdrop:1.0.6")
-
-    // Haze (high-performance 60fps blur for drawer / artifacts / live overlay)
     implementation("dev.chrisbanes.haze:haze:1.6.10")
     implementation("dev.chrisbanes.haze:haze-materials:1.6.10")
 
-    // Full Markdown rendering (always on)
+    // Full Markdown rendering
     implementation("com.mikepenz:multiplatform-markdown-renderer:0.43.0")
     implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.43.0")
 
-    // Image loading (Google Photos / attachments)
+    // Coil 3 + OkHttp Network fetcher (required to load real https:// web images)
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
 
-    // Flutter add-to-app: liquid_glass_widgets (real fragment-shader glass).
-    // Requires `flutter build aar` in flutter_glass/ first.
+    // Flutter add-to-app
     implementation("com.cintra.flutter_glass:flutter_release:1.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

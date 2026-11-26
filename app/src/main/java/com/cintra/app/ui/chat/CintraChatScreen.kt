@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.speech.RecognizerIntent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -81,7 +82,9 @@ import com.cintra.app.ui.pages.FeatureDestination
 import com.cintra.app.ui.pages.ImagesGalleryScreen
 import com.cintra.app.ui.pages.LibraryScreen
 import com.cintra.app.ui.pages.ProjectsScreen
+import com.cintra.app.ui.auth.CintraOnboardingScreen
 import com.cintra.app.ui.settings.CintraSettingsScreen
+import com.cintra.app.utils.CintraPdfExporter
 import com.cintra.app.ui.theme.CintraIcons
 import com.cintra.app.ui.theme.CintraPalette
 import com.cintra.app.ui.theme.CintraTheme
@@ -102,7 +105,14 @@ fun CintraChatScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     CintraTheme(darkTheme = state.darkTheme, isArabic = state.isArabic) {
-        CintraChatScreenContent(viewModel, state)
+        if (!state.hasCompletedOnboarding) {
+            CintraOnboardingScreen(
+                isArabic = state.isArabic,
+                onContinue = viewModel::completeOnboarding,
+            )
+        } else {
+            CintraChatScreenContent(viewModel, state)
+        }
     }
 }
 
@@ -152,6 +162,28 @@ private fun CintraChatScreenContent(
             if (spoken.isNotBlank()) {
                 viewModel.appendDictatedText(spoken)
             }
+        }
+    }
+
+
+    // Native Android Back gesture / button support across all overlays, pages, and drawer
+    val hasOpenOverlay = state.settingsOpen ||
+        state.activeFeature != FeatureDestination.NONE ||
+        state.modelPickerOpen ||
+        state.artifactsOpen ||
+        state.isLiveActive ||
+        state.plusMenuOpen ||
+        drawerState.isOpen
+
+    BackHandler(enabled = hasOpenOverlay) {
+        when {
+            state.modelPickerOpen -> viewModel.closeModelPicker()
+            state.artifactsOpen -> viewModel.closeArtifacts()
+            state.isLiveActive -> viewModel.closeLive()
+            state.plusMenuOpen -> viewModel.closePlusMenu()
+            state.activeFeature != FeatureDestination.NONE -> viewModel.closeFeature()
+            state.settingsOpen -> viewModel.closeSettings()
+            drawerState.isOpen -> scope.launch { drawerState.close() }
         }
     }
 
@@ -320,6 +352,9 @@ private fun CintraChatScreenContent(
             backdrop = backdrop,
             hazeState = hazeState,
             userName = state.userName,
+            authModeLabel = if (state.isArabic) state.authMode.labelAr else state.authMode.labelEn,
+            fontScale = state.fontScale,
+            responseTone = state.responseTone,
             darkTheme = state.darkTheme,
             isArabic = state.isArabic,
             autoWebSearch = state.autoWebSearch,
@@ -330,6 +365,16 @@ private fun CintraChatScreenContent(
             onSetArabic = viewModel::setArabic,
             onToggleAutoWebSearch = viewModel::toggleAutoWebSearch,
             onToggleIllustrativeImages = viewModel::toggleIllustrativeImages,
+            onSetFontScale = viewModel::setFontScale,
+            onSetResponseTone = viewModel::setResponseTone,
+            onSwitchAuthMode = viewModel::reopenOnboarding,
+            onTestSamplePdf = {
+                CintraPdfExporter.exportHtmlToPdf(
+                    context = context,
+                    htmlContent = CintraPdfExporter.sampleArabicInvoiceHtml(),
+                    fileName = "Cintra_Sample_Report_AR",
+                )
+            },
             onOpenCustomize = { viewModel.openFeature(FeatureDestination.CUSTOMIZE) },
             onClearAllChats = viewModel::clearAllChats,
             onShowToast = viewModel::showToast,
@@ -401,6 +446,11 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
                 message = message,
                 onToggleReasoning = { viewModel.toggleReasoningExpanded(message.id) },
                 onCopy = { viewModel.showToast("تم النسخ"); copyToClipboard(context, it) },
+                onExportPdf = { md ->
+                    val html = CintraPdfExporter.buildArabicHtmlFromMarkdown("تقرير Cintra AI", md)
+                    CintraPdfExporter.exportHtmlToPdf(context, html, "Cintra_Response_${System.currentTimeMillis()}")
+                },
+                fontScale = state.fontScale,
                 onOpenArtifacts = { lang, code ->
                     viewModel.openArtifacts("Artifact — ${lang.uppercase()}", code)
                 },

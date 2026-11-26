@@ -34,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -48,11 +50,15 @@ import com.cintra.app.ui.model.Attachment
 import com.cintra.app.ui.model.AttachmentType
 import com.cintra.app.ui.theme.CintraIcons
 import com.cintra.app.ui.theme.CintraThemePalette
-import com.cintra.app.ui.theme.cintraLiquidGlass
 import com.kyant.backdrop.Backdrop
 
 private enum class PrimaryMode { LIVE, SEND, STOP }
 
+/**
+ * Zero-lag Frosted Composer with soft bottom fade gradient (matching ChatGPT Mobile):
+ * avoids expensive per-frame backdrop lens shaders during IME keyboard animations
+ * while keeping crisp frosted opacity and zero text bleed-through.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FloatingGlassComposer(
@@ -86,9 +92,18 @@ fun FloatingGlassComposer(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        palette.canvas.copy(alpha = 0.88f),
+                        palette.canvas,
+                    ),
+                ),
+            )
             .navigationBarsPadding()
             .imePadding()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 10.dp),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
@@ -106,16 +121,23 @@ fun FloatingGlassComposer(
             )
 
             val composerShape = RoundedCornerShape(28.dp)
+            val frostedFill = if (palette.isDark) Color(0xF0171A22) else Color(0xFAFFFFFF)
+            val topRim = Brush.verticalGradient(
+                colors = listOf(palette.rimTop, palette.borderSubtle),
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .cintraLiquidGlass(
-                        backdrop = backdrop,
-                        palette = palette,
+                    .shadow(
+                        elevation = if (palette.isDark) 12.dp else 8.dp,
                         shape = composerShape,
-                        blurRadius = 28.dp,
-                        tint = palette.glassTint,
+                        ambientColor = Color.Black.copy(alpha = 0.14f),
+                        spotColor = Color.Black.copy(alpha = 0.14f),
                     )
+                    .clip(composerShape)
+                    .background(frostedFill)
+                    .border(0.9.dp, topRim, composerShape)
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -133,14 +155,14 @@ fun FloatingGlassComposer(
                 ) {
                     val plusRotation by animateFloatAsState(
                         targetValue = if (plusOpen) 45f else 0f,
-                        animationSpec = tween(220),
+                        animationSpec = tween(200),
                         label = "plusRotation",
                     )
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
-                            .background(if (plusOpen) palette.accentSolid else palette.surface2.copy(alpha = 0.85f))
+                            .background(if (plusOpen) palette.accentSolid else palette.surface2)
                             .clickable(onClick = onTogglePlus),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -149,7 +171,7 @@ fun FloatingGlassComposer(
                             contentDescription = "أدوات ومرفقات",
                             tint = if (plusOpen) palette.accentSolidText else palette.textPrimary,
                             modifier = Modifier
-                                .size(20.dp)
+                                .size(19.dp)
                                 .rotate(plusRotation),
                         )
                     }
@@ -159,7 +181,7 @@ fun FloatingGlassComposer(
                         onValueChange = onTextChange,
                         modifier = Modifier
                             .weight(1f)
-                            .heightIn(min = 38.dp, max = 128.dp)
+                            .heightIn(min = 36.dp, max = 124.dp)
                             .padding(vertical = 6.dp),
                         textStyle = TextStyle(
                             color = palette.textPrimary,
@@ -173,7 +195,7 @@ fun FloatingGlassComposer(
                                 if (text.isEmpty()) {
                                     Text(
                                         text = if (isArabic) "اسأل Cintra أي شيء..." else "Ask Cintra anything...",
-                                        color = palette.textSecondary,
+                                        color = palette.textMuted,
                                         fontSize = 15.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -184,11 +206,10 @@ fun FloatingGlassComposer(
                         },
                     )
 
-                    // Unified grouped capsule for [Mic | Live/Send/Stop]
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
-                            .background(palette.surface2.copy(alpha = 0.78f))
+                            .background(palette.surface2)
                             .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(999.dp))
                             .padding(3.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -259,8 +280,8 @@ private fun ActiveStrip(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(14.dp))
-                    .background(palette.surface)
-                    .border(0.8.dp, palette.borderSubtle, RoundedCornerShape(14.dp))
+                    .background(palette.surface2)
+                    .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(14.dp))
                     .padding(start = 6.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -305,10 +326,7 @@ private fun ActiveStrip(
 }
 
 @Composable
-private fun MicButton(
-    recording: Boolean,
-    onClick: () -> Unit,
-) {
+private fun MicButton(recording: Boolean, onClick: () -> Unit) {
     val palette = CintraThemePalette
     val transition = rememberInfiniteTransition(label = "mic")
     val pulse by transition.animateFloat(
@@ -319,7 +337,7 @@ private fun MicButton(
     )
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(34.dp)
             .clip(CircleShape)
             .background(if (recording) palette.roseSoft else Color.Transparent)
             .clickable(onClick = onClick),
@@ -335,26 +353,23 @@ private fun MicButton(
 }
 
 @Composable
-private fun PrimaryActionButton(
-    mode: PrimaryMode,
-    onClick: () -> Unit,
-) {
+private fun PrimaryActionButton(mode: PrimaryMode, onClick: () -> Unit) {
     val palette = CintraThemePalette
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(34.dp)
             .clip(CircleShape)
-            .background(palette.accentSolid)
+            .background(if (mode == PrimaryMode.LIVE) Color(0xFF00B894) else palette.accentSolid)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Crossfade(targetState = mode, animationSpec = tween(180), label = "primaryMode") { m ->
+        Crossfade(targetState = mode, animationSpec = tween(160), label = "primaryMode") { m ->
             when (m) {
                 PrimaryMode.LIVE -> Icon(
                     imageVector = CintraIcons.Waveform,
                     contentDescription = "تحدث مباشر",
-                    tint = palette.accentSolidText,
-                    modifier = Modifier.size(18.dp),
+                    tint = Color.White,
+                    modifier = Modifier.size(17.dp),
                 )
                 PrimaryMode.SEND -> Icon(
                     imageVector = CintraIcons.ArrowUp,
@@ -366,7 +381,7 @@ private fun PrimaryActionButton(
                     imageVector = CintraIcons.StopSquare,
                     contentDescription = "إيقاف",
                     tint = palette.accentSolidText,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }

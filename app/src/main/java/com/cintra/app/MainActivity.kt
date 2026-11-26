@@ -1,6 +1,7 @@
 package com.cintra.app
 
 import android.os.Bundle
+import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -12,6 +13,7 @@ import com.cintra.app.ui.chat.CintraChatScreen
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        runCatching { WebView.enableSlowWholeDocumentDraw() }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {

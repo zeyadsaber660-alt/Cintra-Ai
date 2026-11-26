@@ -20,6 +20,7 @@ import com.cintra.app.ui.model.CintraModelId
 import com.cintra.app.ui.model.DefaultCintraModel
 import com.cintra.app.ui.model.GenUi
 import com.cintra.app.ui.pages.CintraProject
+import com.cintra.app.ui.auth.AuthMode
 import com.cintra.app.ui.pages.FeatureDestination
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,7 +40,12 @@ data class CintraChatUiState(
     val isArabic: Boolean = true,
     val autoWebSearch: Boolean = true,
     val illustrativeImages: Boolean = true,
+    val hasCompletedOnboarding: Boolean = false,
+    val authMode: AuthMode = AuthMode.GUEST,
     val userName: String = "Zeyad",
+    val userEmail: String = "",
+    val fontScale: Float = 1.0f,
+    val responseTone: String = "متوازن",
     val customInstructions: String = "",
     val projects: List<CintraProject> = emptyList(),
     val activeProjectId: String? = null,
@@ -113,7 +119,12 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _state = MutableStateFlow(
         CintraChatUiState(
+            hasCompletedOnboarding = prefs.getBoolean("onboarded", false),
+            authMode = runCatching { AuthMode.valueOf(prefs.getString("auth_mode", "GUEST") ?: "GUEST") }.getOrDefault(AuthMode.GUEST),
             userName = prefs.getString("user_name", "Zeyad") ?: "Zeyad",
+            userEmail = prefs.getString("user_email", "") ?: "",
+            fontScale = prefs.getFloat("font_scale", 1.0f),
+            responseTone = prefs.getString("response_tone", "متوازن") ?: "متوازن",
             customInstructions = prefs.getString("custom_instructions", "") ?: "",
             darkTheme = prefs.getBoolean("dark_theme", true),
             isArabic = prefs.getBoolean("is_arabic", true),
@@ -141,9 +152,43 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
         val activeProject = s.projects.firstOrNull { it.id == s.activeProjectId }
         return buildList {
             if (s.userName.isNotBlank()) add("User's name: ${s.userName}")
+            add("Response tone: ${s.responseTone}")
             if (s.customInstructions.isNotBlank()) add(s.customInstructions)
             if (activeProject != null) add("Active project (${activeProject.name}): ${activeProject.instructions}")
         }.joinToString("\n")
+    }
+
+
+    fun completeOnboarding(mode: AuthMode, displayName: String, email: String) {
+        prefs.edit()
+            .putBoolean("onboarded", true)
+            .putString("auth_mode", mode.name)
+            .putString("user_name", displayName)
+            .putString("user_email", email)
+            .apply()
+        _state.update {
+            it.copy(
+                hasCompletedOnboarding = true,
+                authMode = mode,
+                userName = displayName,
+                userEmail = email,
+                settingsOpen = false,
+            )
+        }
+    }
+
+    fun reopenOnboarding() {
+        _state.update { it.copy(hasCompletedOnboarding = false, settingsOpen = false) }
+    }
+
+    fun setFontScale(scale: Float) {
+        prefs.edit().putFloat("font_scale", scale).apply()
+        _state.update { it.copy(fontScale = scale) }
+    }
+
+    fun setResponseTone(tone: String) {
+        prefs.edit().putString("response_tone", tone).apply()
+        _state.update { it.copy(responseTone = tone) }
     }
 
     fun toggleTheme() = setDarkTheme(!_state.value.darkTheme)
@@ -416,24 +461,56 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
 
         streamJob?.cancel()
         streamJob = viewModelScope.launch {
+            val pendingContent = StringBuilder()
+            val pendingReasoning = StringBuilder()
+            var lastFlushMs = 0L
+
+            fun flushBuffers(force: Boolean = false) {
+                val now = System.currentTimeMillis()
+                if (!force && now - lastFlushMs < 45L) return
+                if (pendingContent.isEmpty() && pendingReasoning.isEmpty()) return
+                val cDelta = pendingContent.toString()
+                val rDelta = pendingReasoning.toString()
+                pendingContent.clear()
+                pendingReasoning.clear()
+                lastFlushMs = now
+                updateActiveMessage(assistantId) {
+                    it.copy(
+                        content = if (cDelta.isNotEmpty()) it.content + cDelta else it.content,
+                        reasoning = if (rDelta.isNotEmpty()) (it.reasoning ?: "") + rDelta else it.reasoning,
+                    )
+                }
+            }
+
             streamService.streamReply(request).collect { chunk ->
                 when (chunk) {
-                    is AiStreamChunk.ReasoningDelta ->
-                        updateActiveMessage(assistantId) { it.copy(reasoning = (it.reasoning ?: "") + chunk.text) }
+                    is AiStreamChunk.ReasoningDelta -> {
+                        pendingReasoning.append(chunk.text)
+                        flushBuffers()
+                    }
 
-                    AiStreamChunk.ReasoningComplete ->
+                    AiStreamChunk.ReasoningComplete -> {
+                        flushBuffers(force = true)
                         updateActiveMessage(assistantId) { it.copy(reasoningExpanded = false) }
+                    }
 
-                    is AiStreamChunk.ContentDelta ->
-                        updateActiveMessage(assistantId) { it.copy(content = it.content + chunk.text) }
+                    is AiStreamChunk.WebPhotosReady ->
+                        updateActiveMessage(assistantId) { it.copy(webPhotos = chunk.photos) }
+
+                    is AiStreamChunk.ContentDelta -> {
+                        pendingContent.append(chunk.text)
+                        flushBuffers()
+                    }
 
                     is AiStreamChunk.Complete -> {
+                        flushBuffers(force = true)
                         updateActiveMessage(assistantId) {
                             val cleanContent = stripGenUiBlocks(it.content)
                             it.copy(
                                 content = cleanContent,
                                 isStreaming = false,
                                 genUi = chunk.genUi ?: it.genUi,
+                                generatedPdf = chunk.generatedPdf ?: it.generatedPdf,
                             )
                         }
                         _state.update { s -> s.copy(isGenerating = false) }
@@ -461,7 +538,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun stripGenUiBlocks(md: String): String =
-        md.replace(Regex("```genui-(?:checklist|comparison|image)[\\s\\S]*?```"), "").trim()
+        md.replace(Regex("```(?:genui-(?:checklist|comparison|image|grid)|cintra-pdf)[\\s\\S]*?```"), "").trim()
 
     private inline fun updateActiveMessage(
         messageId: String,

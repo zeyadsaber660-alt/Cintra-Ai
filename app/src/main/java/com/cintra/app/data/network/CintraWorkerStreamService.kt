@@ -7,7 +7,11 @@ import com.cintra.app.ui.model.AiStreamRequest
 import com.cintra.app.ui.model.ChecklistItem
 import com.cintra.app.ui.model.CintraModelId
 import com.cintra.app.ui.model.GenUi
+import com.cintra.app.ui.model.GeneratedPdfDoc
 import com.cintra.app.ui.model.MetricItem
+import com.cintra.app.ui.model.VisualGridItem
+import com.cintra.app.ui.model.WebPhotoItem
+import com.cintra.app.utils.CintraPdfExporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -84,7 +88,7 @@ class CintraWorkerStreamService(
                 emit(
                     AiStreamChunk.ContentDelta(
                         if (errMsg.isNotBlank()) "تعذّر إكمال الطلب ($code): $errMsg"
-                        else "تعذّر إكمال الطلب حالياً (رمز $code). تأكد من إضافة مفتاح API للنموذج في لوحة التحكم."
+                        else "تعذّر إكمال الطلب حالياً (رمز $code)."
                     )
                 )
                 emit(AiStreamChunk.Complete(genUi = null))
@@ -103,6 +107,25 @@ class CintraWorkerStreamService(
 
                     runCatching {
                         val json = JSONObject(data)
+
+                        // Real Web Photos pushed by Cintra Worker
+                        val photosArr = json.optJSONArray("cintra_photos")
+                        if (photosArr != null && photosArr.length() > 0) {
+                            val photos = (0 until photosArr.length()).mapNotNull { i ->
+                                val obj = photosArr.optJSONObject(i) ?: return@mapNotNull null
+                                val u = obj.optString("url", "")
+                                if (u.startsWith("https://")) {
+                                    WebPhotoItem(
+                                        url = u,
+                                        title = obj.optString("title", ""),
+                                        source = obj.optString("source", ""),
+                                    )
+                                } else null
+                            }
+                            if (photos.isNotEmpty()) emit(AiStreamChunk.WebPhotosReady(photos))
+                            return@runCatching
+                        }
+
                         val choices = json.optJSONArray("choices") ?: return@runCatching
                         if (choices.length() == 0) return@runCatching
                         val delta = choices.getJSONObject(0).optJSONObject("delta") ?: return@runCatching
@@ -130,7 +153,13 @@ class CintraWorkerStreamService(
             if (hasReasoning && !reasoningDone) {
                 emit(AiStreamChunk.ReasoningComplete)
             }
-            emit(AiStreamChunk.Complete(genUi = extractGenUiFromMarkdown(fullContent.toString())))
+            val finalText = fullContent.toString()
+            emit(
+                AiStreamChunk.Complete(
+                    genUi = extractGenUiFromMarkdown(finalText),
+                    generatedPdf = extractPdfFromMarkdown(finalText, request.prompt),
+                )
+            )
         } catch (_: Exception) {
             emit(AiStreamChunk.ContentDelta("تعذّر الاتصال بالإنترنت. تحقق من اتصالك وحاول مرة أخرى."))
             emit(AiStreamChunk.Complete(genUi = null))
@@ -139,7 +168,65 @@ class CintraWorkerStreamService(
         }
     }.flowOn(Dispatchers.IO)
 
+    private fun extractPdfFromMarkdown(text: String, userPrompt: String): GeneratedPdfDoc? {
+        // 1. Primary structured ```cintra-pdf ... ``` block emitted by AI
+        Regex("```cintra-pdf\\s*([\\s\\S]*?)```").find(text)?.let { match ->
+            val block = match.groupValues[1].trim()
+            val parts = block.split("---HTML---", limit = 2)
+            val metaText = parts.firstOrNull().orEmpty()
+            val rawHtml = parts.getOrNull(1)?.trim().orEmpty()
+
+            val title = Regex("^TITLE:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
+                ?: "مستند Cintra AI"
+            val fileName = Regex("^FILENAME:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
+                ?.let { if (it.endsWith(".pdf", true)) it else "$it.pdf" }
+                ?: "Cintra_Document.pdf"
+            val summary = Regex("^SUMMARY:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
+                ?: "ملف PDF عربي RTL جاهز للتحميل"
+
+            if (rawHtml.isNotBlank()) {
+                return GeneratedPdfDoc(
+                    title = title,
+                    fileName = fileName,
+                    htmlContent = CintraPdfExporter.ensureFullArabicHtml(title, rawHtml),
+                    summary = summary,
+                )
+            }
+        }
+
+        // 2. Smart fallback: if the user explicitly asked for a PDF file, auto-build a downloadable PDF card
+        val askedForPdf = Regex("(pdf|بي دي اف|بي دي إف|ملف\\s+تقرير|ملف\\s+ملخص|فاتورة\\s+pdf)", RegexOption.IGNORE_CASE)
+            .containsMatchIn(userPrompt)
+        if (askedForPdf && text.length > 120) {
+            val cleanMd = text.replace(Regex("```genui-(?:checklist|comparison|image|grid)[\\s\\S]*?```"), "").trim()
+            val title = userPrompt.take(42).trim()
+            return GeneratedPdfDoc(
+                title = title,
+                fileName = "Cintra_${System.currentTimeMillis() % 100000}.pdf",
+                htmlContent = CintraPdfExporter.buildArabicHtmlFromMarkdown(title, cleanMd),
+                summary = "تم تحويل الشرح تلقائياً إلى ملف PDF جاهز للتحميل",
+            )
+        }
+        return null
+    }
+
     private fun extractGenUiFromMarkdown(text: String): GenUi? {
+        Regex("```genui-grid\\s*([\\s\\S]*?)```").find(text)?.let { match ->
+            return runCatching {
+                val obj = JSONObject(match.groupValues[1].trim())
+                val arr = obj.getJSONArray("items")
+                val items = (0 until arr.length()).map { i ->
+                    val it = arr.getJSONObject(i)
+                    VisualGridItem(
+                        title = it.getString("title"),
+                        subtitle = it.optString("subtitle", ""),
+                        tone = it.optString("tone", "blue"),
+                    )
+                }
+                if (items.isNotEmpty()) GenUi.VisualGrid(obj.optString("title", ""), items) else null
+            }.getOrNull()
+        }
+
         Regex("```genui-checklist\\s*([\\s\\S]*?)```").find(text)?.let { match ->
             return runCatching {
                 val arr = JSONArray(match.groupValues[1].trim())

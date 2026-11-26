@@ -25,14 +25,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -57,8 +56,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cintra.app.ui.model.AttachmentType
 import com.cintra.app.ui.model.ChatMessage
+import com.cintra.app.ui.theme.CintraIcons
 import com.cintra.app.ui.theme.CintraThemePalette
 import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownTypography
 
 private val CodeBg = Color(0xFF0D0F14)
 private val CodeHeaderBg = Color(0xFF171A22)
@@ -70,21 +71,17 @@ private val TokNumber = Color(0xFFFCD34D)
 private val TokComment = Color(0xFF64748B)
 private val TokFn = Color(0xFFF9A8D4)
 
-/**
- * Renders a single chat message. User messages become a bubble; assistant
- * messages render the collapsible Thinking card, always-on Markdown (with
- * syntax-highlighted code blocks + Copy / Open-in-Artifacts), embedded
- * Generative UI and message actions.
- */
 @Composable
 fun MessageItem(
     message: ChatMessage,
     onToggleReasoning: () -> Unit,
     onCopy: (String) -> Unit,
+    onExportPdf: (String) -> Unit,
     onOpenArtifacts: (lang: String, code: String) -> Unit,
     onRegenerate: () -> Unit,
     onTab: (String) -> Unit,
     onToggleCheck: (Int) -> Unit,
+    fontScale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
     if (message.isUser) {
@@ -94,7 +91,9 @@ fun MessageItem(
             message = message,
             onToggleReasoning = onToggleReasoning,
             onCopy = onCopy,
+            onExportPdf = onExportPdf,
             onOpenArtifacts = onOpenArtifacts,
+            fontScale = fontScale,
             onRegenerate = onRegenerate,
             onTab = onTab,
             onToggleCheck = onToggleCheck,
@@ -110,11 +109,11 @@ private fun UserBubble(message: ChatMessage, modifier: Modifier) {
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Column(
             modifier = Modifier
-                .widthIn(max = 320.dp)
+                .widthIn(max = 310.dp)
                 .clip(bubbleShape)
                 .background(palette.userBubble)
-                .border(1.dp, palette.borderSubtle, bubbleShape)
-                .padding(horizontal = 17.dp, vertical = 12.dp),
+                .border(0.75.dp, palette.borderSubtle, bubbleShape)
+                .padding(horizontal = 16.dp, vertical = 11.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             message.attachments.forEach { att ->
@@ -122,22 +121,22 @@ private fun UserBubble(message: ChatMessage, modifier: Modifier) {
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .background(palette.surface)
-                        .border(1.dp, palette.borderSubtle, RoundedCornerShape(10.dp))
+                        .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(10.dp))
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Icon(
-                        if (att.type == AttachmentType.PHOTO) Icons.Filled.Image else Icons.Filled.Description,
+                        if (att.type == AttachmentType.PHOTO) CintraIcons.Images else CintraIcons.Folder,
                         contentDescription = null,
                         tint = palette.textSecondary,
-                        modifier = Modifier.size(13.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                     Text(att.name, color = palette.textSecondary, fontSize = 12.sp)
                 }
             }
             if (message.content.isNotEmpty()) {
-                Text(message.content, color = palette.textPrimary, fontSize = 15.sp, lineHeight = 24.sp)
+                Text(message.content, color = palette.textPrimary, fontSize = 15.sp, lineHeight = 23.sp)
             }
         }
     }
@@ -148,10 +147,12 @@ private fun AssistantRow(
     message: ChatMessage,
     onToggleReasoning: () -> Unit,
     onCopy: (String) -> Unit,
+    onExportPdf: (String) -> Unit,
     onOpenArtifacts: (lang: String, code: String) -> Unit,
     onRegenerate: () -> Unit,
     onTab: (String) -> Unit,
     onToggleCheck: (Int) -> Unit,
+    fontScale: Float,
     modifier: Modifier,
 ) {
     val palette = CintraThemePalette
@@ -162,10 +163,10 @@ private fun AssistantRow(
                     .size(26.dp)
                     .clip(RoundedCornerShape(9.dp))
                     .background(palette.surface)
-                    .border(1.dp, palette.borderSubtle, RoundedCornerShape(9.dp)),
+                    .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(9.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = palette.textPrimary, modifier = Modifier.size(13.dp))
+                Icon(CintraIcons.Sparkle, contentDescription = null, tint = palette.textPrimary, modifier = Modifier.size(14.dp))
             }
             Text(message.modelName ?: "Cintra", color = palette.textSecondary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
         }
@@ -179,12 +180,39 @@ private fun AssistantRow(
             )
         }
 
-        MarkdownBody(
-            content = message.content,
-            streaming = message.isStreaming,
-            onCopy = onCopy,
-            onOpenArtifacts = onOpenArtifacts,
-        )
+        // Real web photos carousel fetched automatically by Cintra Worker (ChatGPT Mobile style)
+        if (message.webPhotos.isNotEmpty()) {
+            RealWebPhotosCarousel(photos = message.webPhotos)
+        }
+
+        val isBuildingPdf = message.isStreaming && message.content.contains("```cintra-pdf")
+        val visibleContent = remember(message.content, message.isStreaming) {
+            if (message.content.contains("```cintra-pdf")) {
+                message.content.substringBefore("```cintra-pdf").trim()
+            } else {
+                message.content
+            }
+        }
+
+        if (message.isStreaming && visibleContent.isEmpty() && !isBuildingPdf) {
+            CintraWaitingLoader()
+        } else if (visibleContent.isNotEmpty()) {
+            MarkdownBody(
+                content = visibleContent,
+                streaming = message.isStreaming && !isBuildingPdf,
+                fontScale = fontScale,
+                onCopy = onCopy,
+                onOpenArtifacts = onOpenArtifacts,
+            )
+        }
+
+        if (isBuildingPdf) {
+            CintraPdfBuildingPill()
+        }
+
+        if (!message.isStreaming && message.generatedPdf != null) {
+            GeneratedPdfFileCard(pdf = message.generatedPdf)
+        }
 
         if (!message.isStreaming && message.genUi != null) {
             GenUiView(genUi = message.genUi, onTab = onTab, onToggleCheck = onToggleCheck)
@@ -192,8 +220,9 @@ private fun AssistantRow(
 
         if (!message.isStreaming) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                MessageAction(Icons.Filled.ContentCopy, "نسخ") { onCopy(message.content) }
-                MessageAction(Icons.Filled.Refresh, "إعادة", onRegenerate)
+                MessageAction(Icons.Rounded.ContentCopy, "نسخ") { onCopy(message.content) }
+                MessageAction(Icons.Rounded.PictureAsPdf, "PDF") { onExportPdf(message.content) }
+                MessageAction(Icons.Rounded.Refresh, "إعادة", onRegenerate)
             }
         }
     }
@@ -210,9 +239,9 @@ private fun ThinkingCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(palette.surface)
-            .border(1.dp, palette.borderSubtle, RoundedCornerShape(18.dp)),
+            .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(16.dp)),
     ) {
         Row(
             modifier = Modifier
@@ -221,7 +250,7 @@ private fun ThinkingCard(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Psychology, contentDescription = null, tint = palette.accent, modifier = Modifier.size(15.dp))
+            Icon(CintraIcons.Brain, contentDescription = null, tint = palette.accent, modifier = Modifier.size(16.dp))
             Text(
                 if (streaming) "جارٍ التفكير..." else "عملية التفكير",
                 color = palette.textSecondary,
@@ -230,10 +259,10 @@ private fun ThinkingCard(
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             Icon(
-                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                 contentDescription = null,
                 tint = palette.textSecondary,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(18.dp),
             )
         }
         AnimatedVisibility(visible = expanded) {
@@ -243,17 +272,12 @@ private fun ThinkingCard(
                     .height(IntrinsicSize.Min)
                     .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
             ) {
-                Box(
-                    Modifier
-                        .width(2.dp)
-                        .fillMaxHeight()
-                        .background(palette.accent),
-                )
+                Box(Modifier.width(2.dp).fillMaxHeight().background(palette.accent))
                 Text(
                     reasoning,
                     color = palette.textSecondary,
                     fontSize = 13.sp,
-                    lineHeight = 22.sp,
+                    lineHeight = 21.sp,
                     modifier = Modifier.weight(1f).padding(start = 12.dp),
                 )
             }
@@ -277,26 +301,43 @@ private fun MessageAction(icon: ImageVector, label: String, onClick: () -> Unit)
     }
 }
 
-// ---- Markdown (always on) -------------------------------------------------
+// ---- Smart Markdown Splitter (Text + Custom Full-Wrap Tables + Code) ------
 
 private sealed interface MdSegment {
     data class TextSegment(val md: String) : MdSegment
+    data class TableSegment(val headers: List<String>, val rows: List<List<String>>) : MdSegment
     data class CodeSegment(val lang: String, val code: String) : MdSegment
 }
+
+private fun isTableDivider(line: String): Boolean {
+    val t = line.trim()
+    return t.startsWith("|") && t.contains("---") && t.all { it == '|' || it == '-' || it == ':' || it == ' ' }
+}
+
+private fun splitTableCells(line: String): List<String> =
+    line.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim().replace("**", "") }
 
 private fun splitMarkdown(md: String): List<MdSegment> {
     val segments = mutableListOf<MdSegment>()
     val lines = md.split("\n")
     var i = 0
     val textBuf = StringBuilder()
+
+    fun flushText() {
+        if (textBuf.isNotEmpty()) {
+            segments.add(MdSegment.TextSegment(textBuf.toString()))
+            textBuf.clear()
+        }
+    }
+
     while (i < lines.size) {
         val line = lines[i]
-        if (line.trimStart().startsWith("```")) {
-            val lang = line.trimStart().removePrefix("```").trim().ifEmpty { "code" }
-            if (textBuf.isNotEmpty()) {
-                segments.add(MdSegment.TextSegment(textBuf.toString()))
-                textBuf.clear()
-            }
+        val trimmed = line.trim()
+
+        // 1. Fenced code block
+        if (trimmed.startsWith("```")) {
+            val lang = trimmed.removePrefix("```").trim().ifEmpty { "code" }
+            flushText()
             val code = StringBuilder()
             i++
             while (i < lines.size && !lines[i].trimStart().startsWith("```")) {
@@ -304,12 +345,28 @@ private fun splitMarkdown(md: String): List<MdSegment> {
                 i++
             }
             segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
-        } else {
-            textBuf.append(line).append("\n")
+            i++
+            continue
         }
+
+        // 2. Markdown Table (extracted for zero-ellipsis full-wrap rendering)
+        if (trimmed.startsWith("|") && i + 1 < lines.size && isTableDivider(lines[i + 1])) {
+            flushText()
+            val headers = splitTableCells(trimmed)
+            i += 2
+            val rows = mutableListOf<List<String>>()
+            while (i < lines.size && lines[i].trim().startsWith("|")) {
+                rows.add(splitTableCells(lines[i]))
+                i++
+            }
+            segments.add(MdSegment.TableSegment(headers, rows))
+            continue
+        }
+
+        textBuf.append(line).append("\n")
         i++
     }
-    if (textBuf.isNotEmpty()) segments.add(MdSegment.TextSegment(textBuf.toString()))
+    flushText()
     return segments
 }
 
@@ -317,17 +374,39 @@ private fun splitMarkdown(md: String): List<MdSegment> {
 private fun MarkdownBody(
     content: String,
     streaming: Boolean,
+    fontScale: Float,
     onCopy: (String) -> Unit,
     onOpenArtifacts: (lang: String, code: String) -> Unit,
 ) {
     val segments = remember(content) { splitMarkdown(content) }
-    Column(modifier = Modifier.fillMaxWidth()) {
+    val cintraMdTypography = markdownTypography(
+        h1 = TextStyle(fontSize = (20f * fontScale).sp, lineHeight = (28f * fontScale).sp, fontWeight = FontWeight.Bold),
+        h2 = TextStyle(fontSize = (18f * fontScale).sp, lineHeight = (26f * fontScale).sp, fontWeight = FontWeight.Bold),
+        h3 = TextStyle(fontSize = (16f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.SemiBold),
+        h4 = TextStyle(fontSize = (15.5f * fontScale).sp, lineHeight = (23f * fontScale).sp, fontWeight = FontWeight.SemiBold),
+        text = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.Normal),
+        paragraph = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.Normal),
+        ordered = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.Normal),
+        bullet = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.Normal),
+        quote = TextStyle(fontSize = (14f * fontScale).sp, lineHeight = (22f * fontScale).sp, fontStyle = FontStyle.Normal),
+    )
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         segments.forEach { segment ->
             when (segment) {
                 is MdSegment.TextSegment ->
                     if (segment.md.isNotBlank()) {
-                        Markdown(content = segment.md, modifier = Modifier.fillMaxWidth())
+                        Markdown(
+                            content = segment.md,
+                            typography = cintraMdTypography,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
+                is MdSegment.TableSegment ->
+                    CintraMarkdownTable(segment.headers, segment.rows)
                 is MdSegment.CodeSegment ->
                     CodeBlockCard(segment.lang, segment.code, onCopy, onOpenArtifacts)
             }
@@ -336,21 +415,132 @@ private fun MarkdownBody(
     }
 }
 
+/**
+ * Custom full-wrap Markdown table — never truncates cells with "...".
+ * Uses clean thin dividers and horizontal scroll only when 3+ wide columns exist.
+ */
+@Composable
+private fun CintraMarkdownTable(
+    headers: List<String>,
+    rows: List<List<String>>,
+) {
+    val palette = CintraThemePalette
+    val colCount = maxOf(headers.size, rows.maxOfOrNull { it.size } ?: 0).coerceAtLeast(1)
+    val useScroll = colCount >= 3
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(palette.surface)
+            .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(16.dp))
+            .then(if (useScroll) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+    ) {
+        // Header Row
+        Row(
+            modifier = Modifier
+                .then(if (!useScroll) Modifier.fillMaxWidth() else Modifier)
+                .background(palette.surface2.copy(alpha = 0.7f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            for (c in 0 until colCount) {
+                val cellModifier = if (useScroll) Modifier.width(132.dp) else Modifier.weight(1f)
+                Text(
+                    text = headers.getOrElse(c) { "" },
+                    color = palette.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 19.sp,
+                    softWrap = true,
+                    modifier = cellModifier,
+                )
+            }
+        }
+
+        // Data Rows
+        rows.forEachIndexed { rIdx, row ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(0.65.dp)
+                    .background(palette.borderSubtle),
+            )
+            Row(
+                modifier = Modifier
+                    .then(if (!useScroll) Modifier.fillMaxWidth() else Modifier)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                for (c in 0 until colCount) {
+                    val cellModifier = if (useScroll) Modifier.width(132.dp) else Modifier.weight(1f)
+                    Text(
+                        text = row.getOrElse(c) { "" },
+                        color = if (c == 0) palette.textPrimary else palette.textSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = if (c == 0) FontWeight.SemiBold else FontWeight.Normal,
+                        lineHeight = 20.sp,
+                        softWrap = true,
+                        modifier = cellModifier,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CintraWaitingLoader() {
+    val palette = CintraThemePalette
+    val transition = rememberInfiniteTransition(label = "waitingWave")
+    val p1 by transition.animateFloat(0.25f, 1f, infiniteRepeatable(tween(520, delayMillis = 0), RepeatMode.Reverse), label = "d1")
+    val p2 by transition.animateFloat(0.25f, 1f, infiniteRepeatable(tween(520, delayMillis = 160), RepeatMode.Reverse), label = "d2")
+    val p3 by transition.animateFloat(0.25f, 1f, infiniteRepeatable(tween(520, delayMillis = 320), RepeatMode.Reverse), label = "d3")
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(palette.surface)
+            .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(999.dp))
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        listOf(p1, p2, p3).forEach { alpha ->
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(palette.accent.copy(alpha = alpha)),
+            )
+        }
+        Text(
+            text = "جارٍ التحضير...",
+            color = palette.textSecondary,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+    }
+}
+
 @Composable
 private fun StreamingCursor() {
-    val transition = rememberInfiniteTransition(label = "cursor")
+    val palette = CintraThemePalette
+    val transition = rememberInfiniteTransition(label = "typingPulse")
     val alpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
-        label = "cursorAlpha",
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(420), RepeatMode.Reverse),
+        label = "pulseAlpha",
     )
     Box(
         modifier = Modifier
-            .padding(top = 2.dp)
-            .size(width = 7.dp, height = 15.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(CintraThemePalette.textPrimary.copy(alpha = alpha)),
+            .padding(top = 4.dp)
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(palette.accent.copy(alpha = alpha)),
     )
 }
 
@@ -361,13 +551,17 @@ private fun CodeBlockCard(
     onCopy: (String) -> Unit,
     onOpenArtifacts: (lang: String, code: String) -> Unit,
 ) {
+    val isArabicPlainText = (lang.equals("text", true) || lang.equals("txt", true) || lang.equals("plain", true)) &&
+        code.any { it in '\u0600'..'\u06FF' }
+    val codeDirection = if (isArabicPlainText) LayoutDirection.Rtl else LayoutDirection.Ltr
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
+            .padding(vertical = 4.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(CodeBg)
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp)),
+            .border(0.85.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp)),
     ) {
         Row(
             modifier = Modifier
@@ -393,15 +587,24 @@ private fun CodeBlockCard(
                 .horizontalScroll(rememberScrollState())
                 .padding(14.dp),
         ) {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                val highlighted = remember(code) { highlightKotlin(code) }
-                Text(
-                    text = highlighted,
-                    color = CodeText,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.8.sp,
-                    lineHeight = 21.sp,
-                )
+            CompositionLocalProvider(LocalLayoutDirection provides codeDirection) {
+                if (isArabicPlainText) {
+                    Text(
+                        text = code,
+                        color = CodeText,
+                        fontSize = 13.5.sp,
+                        lineHeight = 22.sp,
+                    )
+                } else {
+                    val highlighted = remember(code) { highlightKotlin(code) }
+                    Text(
+                        text = highlighted,
+                        color = CodeText,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.8.sp,
+                        lineHeight = 21.sp,
+                    )
+                }
             }
         }
     }
@@ -418,13 +621,13 @@ private fun CodeAction(label: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = CodeText, modifier = Modifier.size(12.dp))
+        Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = CodeText, modifier = Modifier.size(12.dp))
         Text(label, color = CodeText, fontSize = 11.5.sp)
     }
 }
 
 private val KotlinTokenPattern = Regex(
-    "(\"[^\"]*\"|//[^\\n]*|@[A-Za-z_]+|\\b(fun|val|var|class|data|return|if|else|when|import|package|object|suspend|override|private|public|internal|enum|interface|true|false|null)\\b|\\b\\d+(?:\\.\\d+)?\\b)",
+    "(\"[^\"]*\"|//[^\\n]*|@[A-Za-z_]+|\\b(fun|val|var|class|data|return|if|else|when|import|package|object|suspend|override|private|public|internal|enum|interface|true|false|null|def|for|in|while|import|from)\\b|\\b\\d+(?:\\.\\d+)?\\b)",
 )
 
 private fun highlightKotlin(code: String): AnnotatedString = buildAnnotatedString {

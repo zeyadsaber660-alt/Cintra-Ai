@@ -23,6 +23,40 @@ You are Cintra, an intelligent bilingual Arabic/English AI assistant.
 \`\`\`genui-comparison
 {"الأداء": [{"label": "Option A", "value": 94}, {"label": "Option B", "value": 85}]}
 \`\`\`
+- When explaining 2 to 4 key concepts, shapes, or categories, optionally append a 2x2 visual card grid (tones: blue, green, amber, slate):
+\`\`\`genui-grid
+{"title": "المفاهيم الأساسية", "items": [{"title": "Start / End", "subtitle": "بداية أو نهاية", "tone": "green"}, {"title": "Process", "subtitle": "عملية أو حساب", "tone": "blue"}]}
+\`\`\`
+- **PDF File Generation**: Whenever the user asks you to create, export, write, or generate a PDF file (e.g., "اعمل ملف PDF", "جهزلي ملخص PDF", "تقرير PDF", "فاتورة PDF", "create a PDF"):
+  1. Write a concise, friendly 1-2 sentence intro in the user's language explaining what the PDF contains.
+  2. Immediately append a fenced \`cintra-pdf\` block with a complete, beautifully styled Arabic RTL (\`<html dir="rtl" lang="ar">\`) or English LTR HTML+CSS document using Google Fonts (\`Cairo\` or \`Tajawal\`), clean headers, tables, callout cards, and print-ready colors:
+\`\`\`cintra-pdf
+TITLE: عنوان المستند
+FILENAME: document_name.pdf
+SUMMARY: وصف مختصر لمحتوى الملف في سطر واحد
+---HTML---
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Cairo', sans-serif; color: #0F172A; background: #FFFFFF; padding: 36px 40px; line-height: 1.85; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284C7; padding-bottom: 12px; margin-bottom: 22px; }
+    h1 { font-size: 22px; margin: 0; color: #0F172A; }
+    h2 { font-size: 17px; color: #0369A1; margin-top: 18px; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th { background: #F1F5F9; padding: 10px; text-align: right; border-bottom: 2px solid #CBD5E1; }
+    td { padding: 10px; border-bottom: 1px solid #E2E8F0; }
+    .callout { background: #F0F9FF; border-right: 4px solid #0284C7; padding: 12px 16px; border-radius: 8px; margin: 14px 0; }
+  </style>
+</head>
+<body>
+  <!-- Full structured content here -->
+</body>
+</html>
+\`\`\`
+  Never say "I cannot create PDF files"—always emit the \`cintra-pdf\` block so the Cintra app renders a downloadable PDF card directly in chat!
 `;
 
 const DEFAULT_CONFIG = {
@@ -109,7 +143,7 @@ function verifyAppToken(request, env) {
 function needsAutoWebSearch(prompt, tool, autoEnabled) {
   if (tool === "web") return true;
   if (!autoEnabled || !prompt) return false;
-  return /(اليوم|الآن|أحدث|سعر|طقس|أخبار|2025|2026|2027|latest|news|price|weather|today|current)/i.test(prompt);
+  return /(دور|دورلي|ابحث|بحث|طرق|سفر|السفر|فيزا|تأشيرة|هجرة|أفضل|مقارنة|سعر|اسعار|أسعار|اليوم|الآن|أحدث|أخبار|طقس|ازاي|إزاي|كيف|شروط|تكلفة|2025|2026|2027|search|find|travel|visa|latest|news|price|weather|today|current|best|how to)/i.test(prompt);
 }
 
 async function runAutoWebSearch(query, tavilyApiKey) {
@@ -135,6 +169,44 @@ async function runAutoWebSearch(query, tavilyApiKey) {
     }
   } catch {}
   return "";
+}
+
+
+async function fetchRealWebPhotos(query, tavilyApiKey) {
+  if (!query || query.length < 3) return [];
+  const photos = [];
+  try {
+    if (tavilyApiKey) {
+      const r = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 4, include_images: true, include_image_descriptions: true })
+      });
+      if (r.ok) {
+        const d = await r.json();
+        for (const img of (d.images || []).slice(0, 5)) {
+          const url = typeof img === "string" ? img : img.url;
+          const title = typeof img === "string" ? "" : (img.description || "");
+          if (url && url.startsWith("https://")) photos.push({ url, title, source: "web" });
+        }
+        if (photos.length > 0) return photos;
+      }
+    }
+    // Free Wikimedia Commons real-photo search (works in Arabic & English, zero API key needed)
+    const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=6&prop=pageimages&piprop=thumbnail&pithumbsize=640&format=json&origin=*`;
+    const wr = await fetch(wikiUrl, { headers: { "User-Agent": "CintraAI/4.0" } });
+    if (wr.ok) {
+      const wd = await wr.json();
+      const pages = Object.values(wd?.query?.pages || {});
+      for (const p of pages) {
+        if (p?.thumbnail?.source && p.thumbnail.source.startsWith("https://")) {
+          photos.push({ url: p.thumbnail.source, title: p.title || "", source: "wikipedia" });
+        }
+        if (photos.length >= 4) break;
+      }
+    }
+  } catch {}
+  return photos;
 }
 
 export default {
@@ -274,6 +346,38 @@ export default {
       if (!upstreamResp.ok) {
         const errText = await upstreamResp.text();
         return jsonResponse({ error: `خطأ من المزود (${upstreamResp.status}): ${errText.slice(0, 220)}` }, upstreamResp.status);
+      }
+
+      const webPhotos = body.illustrativeImages !== false
+        ? await fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey)
+        : [];
+
+      if (webPhotos.length > 0 && upstreamResp.body) {
+        const encoder = new TextEncoder();
+        const prelude = encoder.encode(`data: ${JSON.stringify({ cintra_photos: webPhotos })}\n\n`);
+        const stream = new ReadableStream({
+          async start(controller) {
+            controller.enqueue(prelude);
+            const reader = upstreamResp.body.getReader();
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                controller.enqueue(value);
+              }
+            } finally {
+              controller.close();
+            }
+          }
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: corsHeaders({
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive"
+          })
+        });
       }
 
       return new Response(upstreamResp.body, {
