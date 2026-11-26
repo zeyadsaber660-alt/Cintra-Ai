@@ -557,7 +557,7 @@ private fun StreamingPlainBody(
     val palette = CintraThemePalette
     val display = remember(content) {
         content
-            .replace(Regex("^#{1,4}\s*", RegexOption.MULTILINE), "")
+            .replace(Regex("^#{1,4}\\s*", RegexOption.MULTILINE), "")
             .replace("**", "")
     }
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
