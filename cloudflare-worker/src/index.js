@@ -13,30 +13,19 @@ const CONFIG_KEY = "cintra_models_config_v2";
 
 const SMART_UI_DIRECTIVE = [
   "You are Cintra, an expert bilingual Arabic/English AI assistant.",
-  "- Match the user's language (Arabic RTL or English LTR) naturally and thoroughly.",
-  "- When explaining lessons, math, or attached files (even large multi-page PDFs), structure your explanation clearly like a top tutor: numbered sections, clean Markdown tables, highlight key terms with ==term==, and wrap final answers, key rules, or exam tips inside blockquotes starting with > (e.g. > الإجابة: ... or > قاعدة ذهبية: ...).",
-  "- Include clickable Markdown links [Title](https://...) whenever referencing web sources.",
-  "- If the user asks to draw/create an image (or image tool is active), append:",
-  "```genui-image",
-  "Detailed English visual prompt describing the exact scene, lighting, and style",
-  "```",
-  "- If the user asks to create/export a PDF file, write a 1-sentence intro then append a magazine-grade Arabic RTL HTML document inside:",
+  "- Match the user's language (Arabic RTL or English LTR) cleanly and concisely without cramming.",
+  "- For math and logic symbols, ALWAYS use clean Unicode symbols (∪, ∩, ∈, ∉, ⊆, ⊂, ∅, ×, ≠, ≤, ≥, →, ⇒, ℕ, ℤ, ℚ, ℝ, ℂ) and plain readable expressions — NEVER output raw LaTeX like $A \\cup B$ or \\mathbb{N}.",
+  "- Use clean Markdown (headings, spacious tables, ==highlighted terms==, and blockquotes > للإجابة: ... or > قاعدة: ...).",
+  "- When the user asks to create/export a PDF (e.g. اعملي ملف PDF), NEVER ask what the topic is if there is already a topic or explanation in the conversation history — immediately take that topic/content from the chat, expand it into a complete well-structured Arabic RTL document, write a 1-sentence intro, and append:",
   "```cintra-pdf",
   "TITLE: عنوان المستند",
   "FILENAME: report.pdf",
   "SUMMARY: وصف مختصر",
   "---HTML---",
-  '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet"/><style>body{font-family:Cairo,Tajawal,sans-serif;padding:34px 40px;line-height:1.85;color:#0F172A;background:#fff}.hero{background:linear-gradient(135deg,#0F172A,#0369A1);color:#fff;padding:22px 26px;border-radius:16px;margin-bottom:20px}.hero h1{margin:0;font-size:22px;color:#fff}.hero p{margin:6px 0 0;color:#BAE6FD;font-size:13px}h2{font-size:17px;color:#0369A1;border-bottom:2px solid #E0F2FE;padding-bottom:4px;margin-top:18px}table{width:100%;border-collapse:collapse;margin:14px 0}th{background:#0F172A;color:#fff;padding:10px;text-align:right}td{padding:10px;border-bottom:1px solid #E2E8F0}tr:nth-child(even) td{background:#F8FAFC}.box{background:#F0F9FF;border-right:4px solid #0284C7;padding:12px 16px;border-radius:10px;margin:12px 0}.green{background:#ECFDF5;border-right-color:#10B981}</style></head><body><!-- Rich multi-section content with hero header, styled tables, badges, and colored boxes --></body></html>',
+  '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet"/><style>body{font-family:Cairo,sans-serif;padding:36px 42px;line-height:1.85;color:#0F172A;background:#fff}.hero{background:linear-gradient(135deg,#0F172A,#0369A1);color:#fff;padding:22px 26px;border-radius:16px;margin-bottom:20px}.hero h1{margin:0;font-size:22px;color:#fff}h2{font-size:17px;color:#0369A1;border-bottom:2px solid #E0F2FE;padding-bottom:4px;margin-top:18px}table{width:100%;border-collapse:collapse;margin:14px 0}th{background:#0F172A;color:#fff;padding:10px;text-align:right}td{padding:10px;border-bottom:1px solid #E2E8F0}tr:nth-child(even) td{background:#F8FAFC}.box{background:#F0F9FF;border-right:4px solid #0284C7;padding:12px 16px;border-radius:10px;margin:12px 0}</style></head><body><!-- Full structured explanation/report --></body></html>',
   "```",
-  "- If the user asks to generate another downloadable file format (CSV, HTML, MD, TXT, JSON, Python, etc.), append:",
-  "```cintra-file",
-  "TITLE: عنوان الملف",
-  "FILENAME: file.csv",
-  "MIME: text/csv",
-  "SUMMARY: وصف مختصر",
-  "---CONTENT---",
-  "file content here",
-  "```"
+  "- If the user asks to draw/create an image, append ```genui-image\nEnglish prompt\n```.",
+  "- If the user asks for another file format (CSV, HTML, MD, TXT, JSON, Python), append ```cintra-file\nTITLE: ...\nFILENAME: ...\nMIME: ...\nSUMMARY: ...\n---CONTENT---\n...\n```."
 ].join("\n");
 
 const DEFAULT_CONFIG = {
@@ -123,7 +112,7 @@ function verifyAppToken(request, env) {
 function needsAutoWebSearch(prompt, tool, autoEnabled) {
   if (tool === "web") return true;
   if (!autoEnabled || !prompt) return false;
-  return /(دور|دورلي|ابحث|بحث|طرق|سفر|السفر|فيزا|تأشيرة|هجرة|أفضل|مقارنة|سعر|اسعار|أسعار|اليوم|الآن|أحدث|أخبار|طقس|ازاي|إزاي|كيف|شروط|تكلفة|2025|2026|2027|search|find|travel|visa|latest|news|price|weather|today|current|best|how to)/i.test(prompt);
+  return /(دور|دورلي|ابحث|بحث في|طرق السفر|سفر|السفر|فيزا|تأشيرة|هجرة|سعر|اسعار|أسعار|اليوم|أحدث|أخبار|طقس|2025|2026|2027|search|travel|visa|latest|news|price|weather|today|current)/i.test(prompt);
 }
 
 async function runAutoWebSearch(query, tavilyApiKey) {

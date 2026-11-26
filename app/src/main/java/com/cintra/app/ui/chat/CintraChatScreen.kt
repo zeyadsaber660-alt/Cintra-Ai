@@ -246,6 +246,7 @@ private fun CintraChatScreenContent(
 
                 FloatingGlassComposer(
                     backdrop = backdrop,
+                    hazeState = hazeState,
                     text = state.composerText,
                     onTextChange = viewModel::onComposerTextChange,
                     activeTool = state.activeTool,

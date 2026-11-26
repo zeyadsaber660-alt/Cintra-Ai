@@ -52,6 +52,9 @@ import com.cintra.app.ui.model.AttachmentType
 import com.cintra.app.ui.theme.CintraIcons
 import com.cintra.app.ui.theme.CintraThemePalette
 import com.kyant.backdrop.Backdrop
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.HazeMaterials
 
 private enum class PrimaryMode { LIVE, SEND, STOP }
 
@@ -64,6 +67,7 @@ private enum class PrimaryMode { LIVE, SEND, STOP }
 @Composable
 fun FloatingGlassComposer(
     backdrop: Backdrop,
+    hazeState: HazeState,
     text: String,
     onTextChange: (String) -> Unit,
     activeTool: ActiveTool?,
@@ -93,7 +97,6 @@ fun FloatingGlassComposer(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(palette.canvas.copy(alpha = 0.94f))
             .navigationBarsPadding()
             .imePadding()
             .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp),
@@ -114,7 +117,7 @@ fun FloatingGlassComposer(
             )
 
             val composerShape = RoundedCornerShape(28.dp)
-            val frostedFill = if (palette.isDark) Color(0xF0171A22) else Color(0xFAFFFFFF)
+            val frostedFill = if (palette.isDark) Color(0xB8171A22) else Color(0xCCFFFFFF)
             val topRim = Brush.verticalGradient(
                 colors = listOf(palette.rimTop, palette.borderSubtle),
             )
@@ -123,6 +126,7 @@ fun FloatingGlassComposer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(composerShape)
+                    .hazeEffect(state = hazeState, style = HazeMaterials.thin())
                     .background(frostedFill)
                     .border(0.9.dp, topRim, composerShape)
                     .padding(horizontal = 10.dp, vertical = 8.dp),

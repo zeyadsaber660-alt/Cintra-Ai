@@ -47,6 +47,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -355,6 +359,39 @@ private sealed interface MdSegment {
     data class CalloutSegment(val text: String) : MdSegment
 }
 
+
+private fun formatReadableMath(input: String): String {
+    var s = input
+    // Strip LaTeX delimiters
+    s = s.replace("$$", "").replace("\\(", "").replace("\\)", "").replace("\\[", "").replace("\\]", "")
+    s = s.replace(Regex("\\$([^\\$\\n]+?)\\$")) { it.groupValues[1] }
+    // Fractions & square roots
+    s = s.replace(Regex("\\\\frac\\{([^\\}]+)\\}\\{([^\\}]+)\\}"), "($1)/($2)")
+    s = s.replace(Regex("\\\\sqrt\\{([^}]+)\\}"), "√($1)")
+    s = s.replace(Regex("\\\\overline\\{([^}]+)\\}"), "$1′")
+    s = s.replace(Regex("\\\\(?:text|mathrm|mathbf)\\{([^}]+)\\}"), "$1")
+    // Blackboard bold & calligraphic sets
+    val replacements = listOf(
+        "\\mathbb{N}" to "ℕ", "\\mathbb{Z}" to "ℤ", "\\mathbb{Q}" to "ℚ",
+        "\\mathbb{R}" to "ℝ", "\\mathbb{C}" to "ℂ", "\\mathcal{P}" to "𝒫",
+        "\\varnothing" to "∅", "\\emptyset" to "∅",
+        "\\subseteq" to "⊆", "\\subset" to "⊂", "\\supseteq" to "⊇", "\\supset" to "⊃",
+        "\\notin" to "∉", "\\in" to "∈",
+        "\\cup" to "∪", "\\cap" to "∩", "\\setminus" to " \\ ",
+        "\\times" to "×", "\\triangle" to "△", "\\oplus" to "⊕",
+        "\\neq" to "≠", "\\leq" to "≤", "\\geq" to "≥",
+        "\\implies" to "⇒", "\\Rightarrow" to "⇒", "\\iff" to "⇔", "\\rightarrow" to "→",
+        "\\land" to "∧", "\\lor" to "∨", "\\neg" to "¬",
+        "\\forall" to "∀", "\\exists" to "∃", "\\infty" to "∞",
+        "\\cdots" to "…", "\\ldots" to "…", "\\dots" to "…",
+        "\\mid" to "|", "\\{" to "\u007B", "\\}" to "\u007D",
+    )
+    for ((k, v) in replacements) {
+        s = s.replace(k, v)
+    }
+    return s.replace("  ", " ")
+}
+
 private fun isTableDivider(line: String): Boolean {
     val t = line.trim()
     return t.startsWith("|") && t.contains("---") && t.all { it == '|' || it == '-' || it == ':' || it == ' ' }
@@ -461,7 +498,7 @@ private fun MarkdownBody(
                 is MdSegment.TextSegment ->
                     if (segment.md.isNotBlank()) {
                         Markdown(
-                            content = segment.md.replace(Regex("==(.+?)=="), "`$1`"),
+                            content = formatReadableMath(segment.md).replace(Regex("==(.+?)=="), "`$1`"),
                             typography = cintraMdTypography,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -508,7 +545,7 @@ private fun CintraCalloutBox(text: String, fontScale: Float) {
     ) {
         Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(bar))
         Text(
-            text = text.replace("**", "").replace("==", ""),
+            text = formatReadableMath(text).replace("**", "").replace("==", ""),
             color = palette.textPrimary,
             fontSize = (14.5f * fontScale).sp,
             lineHeight = (23f * fontScale).sp,
@@ -518,12 +555,48 @@ private fun CintraCalloutBox(text: String, fontScale: Float) {
     }
 }
 
+private fun buildTableCellAnnotated(
+    raw: String,
+    linkColor: Color,
+    uriHandler: androidx.compose.ui.platform.UriHandler,
+): AnnotatedString {
+    val clean = formatReadableMath(raw)
+    val linkRegex = Regex("\\[([^\\]]+)\\]\\((https?://[^\\s)]+)\\)")
+    if (!linkRegex.containsMatchIn(clean)) return AnnotatedString(clean)
+    return buildAnnotatedString {
+        var last = 0
+        for (m in linkRegex.findAll(clean)) {
+            append(clean, last, m.range.first)
+            val label = m.groupValues[1]
+            val url = m.groupValues[2]
+            pushLink(
+                LinkAnnotation.Url(
+                    url = url,
+                    styles = TextLinkStyles(
+                        style = SpanStyle(
+                            color = linkColor,
+                            fontWeight = FontWeight.SemiBold,
+                            textDecoration = TextDecoration.Underline,
+                        ),
+                    ),
+                    linkInteractionListener = { uriHandler.openUri(url) },
+                ),
+            )
+            append(label)
+            pop()
+            last = m.range.last + 1
+        }
+        append(clean, last, clean.length)
+    }
+}
+
 @Composable
 private fun CintraMarkdownTable(
     headers: List<String>,
     rows: List<List<String>>,
 ) {
     val palette = CintraThemePalette
+    val uriHandler = LocalUriHandler.current
     val colCount = maxOf(headers.size, rows.maxOfOrNull { it.size } ?: 0).coerceAtLeast(1)
     val useScroll = colCount >= 3
 
@@ -536,18 +609,21 @@ private fun CintraMarkdownTable(
             .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(16.dp))
             .then(if (useScroll) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
     ) {
-        // Header Row
         Row(
             modifier = Modifier
                 .then(if (!useScroll) Modifier.fillMaxWidth() else Modifier)
                 .background(palette.surface2.copy(alpha = 0.7f))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             for (c in 0 until colCount) {
-                val cellModifier = if (useScroll) Modifier.width(132.dp) else Modifier.weight(1f)
+                val cellModifier = when {
+                    useScroll -> Modifier.width(if (c == 0) 140.dp else 185.dp)
+                    colCount == 2 -> Modifier.weight(if (c == 0) 0.38f else 0.62f)
+                    else -> Modifier.weight(1f)
+                }
                 Text(
-                    text = headers.getOrElse(c) { "" },
+                    text = formatReadableMath(headers.getOrElse(c) { "" }),
                     color = palette.textPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
@@ -558,8 +634,7 @@ private fun CintraMarkdownTable(
             }
         }
 
-        // Data Rows
-        rows.forEachIndexed { rIdx, row ->
+        rows.forEach { row ->
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -569,13 +644,20 @@ private fun CintraMarkdownTable(
             Row(
                 modifier = Modifier
                     .then(if (!useScroll) Modifier.fillMaxWidth() else Modifier)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 for (c in 0 until colCount) {
-                    val cellModifier = if (useScroll) Modifier.width(132.dp) else Modifier.weight(1f)
+                    val cellModifier = when {
+                        useScroll -> Modifier.width(if (c == 0) 140.dp else 185.dp)
+                        colCount == 2 -> Modifier.weight(if (c == 0) 0.38f else 0.62f)
+                        else -> Modifier.weight(1f)
+                    }
+                    val cellAnnotated = remember(row.getOrElse(c) { "" }) {
+                        buildTableCellAnnotated(row.getOrElse(c) { "" }, palette.accent, uriHandler)
+                    }
                     Text(
-                        text = row.getOrElse(c) { "" },
+                        text = cellAnnotated,
                         color = if (c == 0) palette.textPrimary else palette.textSecondary,
                         fontSize = 13.sp,
                         fontWeight = if (c == 0) FontWeight.SemiBold else FontWeight.Normal,

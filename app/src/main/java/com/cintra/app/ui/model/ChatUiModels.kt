@@ -98,6 +98,7 @@ data class AiStreamRequest(
     val model: CintraModel,
     val tool: ActiveTool?,
     val attachments: List<Attachment>,
+    val history: List<ChatMessage> = emptyList(),
 )
 
 sealed interface AiStreamChunk {

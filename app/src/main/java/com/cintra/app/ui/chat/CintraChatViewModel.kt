@@ -493,11 +493,15 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
             )
         }
 
+        val priorHistory = (_state.value.activeSession?.messages ?: emptyList())
+            .filter { !it.isStreaming && it.id != userMessage.id && it.id != assistantMessage.id }
+            .takeLast(10)
         val request = AiStreamRequest(
             prompt = finalPrompt,
             model = model,
             tool = usedTool,
             attachments = usedAttachments,
+            history = priorHistory,
         )
         val assistantId = assistantMessage.id
 

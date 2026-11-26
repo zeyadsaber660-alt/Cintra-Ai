@@ -105,7 +105,20 @@ class CintraWorkerStreamService(
             put("illustrativeImages", illustrativeImagesProvider() && !hasFiles)
             put("customInstructions", customInstructionsProvider())
             put("rawPrompt", request.prompt)
-            put("messages", JSONArray().apply { put(userMessageObj) })
+            put("messages", JSONArray().apply {
+                request.history.forEach { msg ->
+                    val cleaned = msg.content
+                        .replace(Regex("```(?:genui-[a-z-]+|cintra-pdf|cintra-file)[\\s\\S]*?(?:```|$)"), "")
+                        .trim()
+                    if (cleaned.isNotEmpty()) {
+                        put(JSONObject().apply {
+                            put("role", if (msg.isUser) "user" else "assistant")
+                            put("content", cleaned.take(6_000))
+                        })
+                    }
+                }
+                put(userMessageObj)
+            })
         }
 
         var conn: HttpURLConnection? = null
@@ -270,7 +283,8 @@ class CintraWorkerStreamService(
 
         val askedForPdf = Regex("(pdf|بي دي اف|بي دي إف|ملف\\s+تقرير|ملف\\s+ملخص|فاتورة\\s+pdf)", RegexOption.IGNORE_CASE)
             .containsMatchIn(userPrompt)
-        if (askedForPdf && text.length > 100 && !text.startsWith("خادم المزوّد") && !text.startsWith("تعذّر")) {
+        val isQuestion = text.contains("هل يمكنك تحديد") || text.contains("ما الموضوع")
+        if (askedForPdf && !isQuestion && text.length > 140 && !text.startsWith("خادم المزوّد") && !text.startsWith("تعذّر")) {
             val cleanMd = text.replace(Regex("```(?:genui-[a-z-]+|cintra-pdf)[\\s\\S]*?(?:```|$)"), "").trim()
             val title = userPrompt.take(42).trim()
             return GeneratedPdfDoc(
