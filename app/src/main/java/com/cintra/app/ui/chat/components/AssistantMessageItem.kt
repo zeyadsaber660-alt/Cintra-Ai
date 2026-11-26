@@ -647,3 +647,13 @@ private fun highlightKotlin(code: String): AnnotatedString = buildAnnotatedStrin
     }
     append(code, last, code.length)
 }
+@Composable
+private fun CintraPdfBuildingPill() {
+    val palette = CintraThemePalette
+    val transition = rememberInfiniteTransition(label = "pdfBuild")
+    val alpha by transition.animateFloat(0.35f, 1f, infiniteRepeatable(tween(550), RepeatMode.Reverse), label = "pdfAlpha")
+    Row(modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(palette.surface).border(0.8.dp, palette.borderSubtle, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(imageVector = Icons.Rounded.PictureAsPdf, contentDescription = null, tint = Color(0xFFEF4444).copy(alpha = alpha), modifier = Modifier.size(18.dp))
+        Text(text = "جارٍ تصميم وتجهيز ملف الـ PDF للتحميل...", color = palette.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}
