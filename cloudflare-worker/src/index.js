@@ -14,6 +14,7 @@ const CONFIG_KEY = "cintra_models_config_v2";
 const SMART_UI_DIRECTIVE = [
   "You are Cintra, an expert bilingual Arabic/English AI assistant.",
   "- Match the user's language (Arabic RTL or English LTR) cleanly and concisely without cramming.",
+  "- When a user asks about an ambiguous or institution-specific term (like وشاح السادسة or a specific faculty/year curriculum) or asks to fact-check something, use the Live Web Search Context, cite clickable sources [Title](URL), and politely ask which university/faculty they belong to if multiple possibilities exist.",
   "- For math and logic symbols, ALWAYS use clean Unicode symbols (∪, ∩, ∈, ∉, ⊆, ⊂, ∅, ×, ≠, ≤, ≥, →, ⇒, ℕ, ℤ, ℚ, ℝ, ℂ) and plain readable expressions — NEVER output raw LaTeX like $A \\cup B$ or \\mathbb{N}.",
   "- Use clean Markdown (headings, spacious tables, ==highlighted terms==, and blockquotes > للإجابة: ... or > قاعدة: ...).",
   "- When the user asks to create/export a PDF (e.g. اعملي ملف PDF), NEVER ask what the topic is if there is already a topic or explanation in the conversation history — immediately take that topic/content from the chat, expand it into a complete well-structured Arabic RTL document, write a 1-sentence intro, and append:",
@@ -112,32 +113,35 @@ function verifyAppToken(request, env) {
 function needsAutoWebSearch(prompt, tool, autoEnabled) {
   if (tool === "web") return true;
   if (!autoEnabled || !prompt) return false;
-  return /(دور|دورلي|ابحث|بحث في|طرق السفر|سفر|السفر|فيزا|تأشيرة|هجرة|سعر|اسعار|أسعار|اليوم|أحدث|أخبار|طقس|2025|2026|2027|search|travel|visa|latest|news|price|weather|today|current)/i.test(prompt);
+  return /(دور|دورلي|ابحث|بحث|صح ولا لا|حقيقة|تأكد|تأكيد|مصدر|مصادر|معلومة|وشاح|جامعة|كلية|فرقة|الفرقة|طرق السفر|سفر|السفر|فيزا|تأشيرة|هجرة|سعر|اسعار|أسعار|اليوم|أحدث|أخبار|طقس|2025|2026|2027|search|verify|fact check|sources|travel|visa|latest|news|price|weather|today|current)/i.test(prompt);
 }
 
 async function runAutoWebSearch(query, tavilyApiKey) {
+  const sources = [];
   try {
     if (tavilyApiKey) {
       const resp = await fetch("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 4, include_answer: true })
+        body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 5, include_answer: true, search_depth: "advanced" })
       });
       if (resp.ok) {
         const data = await resp.json();
-        const snippets = (data.results || [])
-          .map((r, i) => `[${i + 1}] ${r.title} (${r.url}): ${r.content}`)
-          .join("\n");
-        return snippets || data.answer || "";
+        const snippets = (data.results || []).map((r, i) => {
+          if (r.url) sources.push({ title: r.title || r.url, url: r.url });
+          return `[${i + 1}] ${r.title} (${r.url}): ${r.content}`;
+        }).join("\n");
+        return { text: snippets || data.answer || "", sources };
       }
     }
     const ddg = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`);
     if (ddg.ok) {
       const d = await ddg.json();
-      if (d.AbstractText) return `${d.Heading || ""}: ${d.AbstractText} (${d.AbstractURL || ""})`;
+      if (d.AbstractURL) sources.push({ title: d.Heading || "Source", url: d.AbstractURL });
+      if (d.AbstractText) return { text: `${d.Heading || ""}: ${d.AbstractText} (${d.AbstractURL || ""})`, sources };
     }
   } catch (_e) {}
-  return "";
+  return { text: "", sources };
 }
 
 
@@ -318,11 +322,13 @@ export default {
         : (typeof rawUserMsg === "string" ? rawUserMsg : "");
 
       let webContext = "";
+      let webSources = [];
       const urlContext = await fetchUrlContext(lastUserPrompt);
       if (urlContext) webContext += urlContext + "\n\n";
       if (needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false)) {
         const searchRes = await runAutoWebSearch(lastUserPrompt, cfg.searchApiKey);
-        if (searchRes) webContext += searchRes;
+        if (searchRes.text) webContext += searchRes.text;
+        if (Array.isArray(searchRes.sources)) webSources = searchRes.sources;
       }
 
       const fullSystem = [
@@ -359,7 +365,10 @@ export default {
         const stream = new ReadableStream({
           async start(controller) {
             if (webContext) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_status: "تم جلب نتائج الويب • جارٍ صياغة الإجابة..." })}\n\n`));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_status: "تم البحث في الويب والتحقق من المصادر..." })}\n\n`));
+            }
+            if (webSources.length > 0) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_sources: webSources })}\n\n`));
             }
             if (webPhotos.length > 0) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_photos: webPhotos })}\n\n`));

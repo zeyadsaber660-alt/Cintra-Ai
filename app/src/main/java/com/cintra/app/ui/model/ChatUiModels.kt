@@ -23,6 +23,11 @@ data class MetricItem(val label: String, val value: Int)
 
 data class ChecklistItem(val text: String, val done: Boolean)
 
+data class WebSourceItem(
+    val title: String,
+    val url: String,
+)
+
 data class WebPhotoItem(
     val url: String,
     val title: String = "",
@@ -83,6 +88,7 @@ data class ChatMessage(
     val attachments: List<Attachment> = emptyList(),
     val genUi: GenUi? = null,
     val webPhotos: List<WebPhotoItem> = emptyList(),
+    val webSources: List<WebSourceItem> = emptyList(),
     val generatedPdf: GeneratedPdfDoc? = null,
     val generatedFile: GeneratedGenericFile? = null,
 )
@@ -107,6 +113,7 @@ sealed interface AiStreamChunk {
     data class ContentDelta(val text: String) : AiStreamChunk
     data object ReasoningComplete : AiStreamChunk
     data class WebPhotosReady(val photos: List<WebPhotoItem>) : AiStreamChunk
+    data class SourcesReady(val sources: List<WebSourceItem>) : AiStreamChunk
     data class Complete(
         val genUi: GenUi?,
         val generatedPdf: GeneratedPdfDoc? = null,

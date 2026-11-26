@@ -264,6 +264,10 @@ private fun AssistantRow(
             GeneratedGenericFileCard(file = message.generatedFile)
         }
 
+        if (!message.isStreaming && message.webSources.isNotEmpty()) {
+            WebSourcesRow(sources = message.webSources)
+        }
+
         if (!message.isStreaming && message.genUi != null) {
             GenUiView(genUi = message.genUi, onTab = onTab, onToggleCheck = onToggleCheck)
         }
@@ -671,6 +675,56 @@ private fun CintraMarkdownTable(
     }
 }
 
+
+
+@Composable
+private fun WebSourcesRow(sources: List<com.cintra.app.ui.model.WebSourceItem>) {
+    val palette = CintraThemePalette
+    val uriHandler = LocalUriHandler.current
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "المصادر",
+            color = palette.textMuted,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            sources.forEach { src ->
+                val host = remember(src.url) {
+                    runCatching { java.net.URI(src.url).host?.removePrefix("www.") ?: src.title }
+                        .getOrDefault(src.title)
+                }
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(palette.surface)
+                        .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(999.dp))
+                        .clickable { runCatching { uriHandler.openUri(src.url) } }
+                        .padding(horizontal = 11.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(CintraIcons.Globe, contentDescription = null, tint = palette.accent, modifier = Modifier.size(13.dp))
+                    Text(
+                        text = host,
+                        color = palette.textPrimary,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun CintraPdfBuildingPill() {

@@ -240,7 +240,7 @@ class CintraWorkerStreamService(
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun extractGenericFileFromMarkdown(text: String): GeneratedGenericFile? {
+    private fun extractGenericFileFromMarkdown(text: String, userPrompt: String): GeneratedGenericFile? {
         Regex("```cintra-file\\s*([\\s\\S]*?)```").find(text)?.let { match ->
             val block = match.groupValues[1].trim()
             val parts = block.split("---CONTENT---", limit = 2)
@@ -252,6 +252,27 @@ class CintraWorkerStreamService(
             val mime = Regex("^MIME:\\s*(.+)$", RegexOption.MULTILINE).find(meta)?.groupValues?.get(1)?.trim() ?: "text/plain"
             val summary = Regex("^SUMMARY:\\s*(.+)$", RegexOption.MULTILINE).find(meta)?.groupValues?.get(1)?.trim() ?: "ملف مُنشأ بواسطة Cintra AI"
             return GeneratedGenericFile(title, fileName, mime, body, summary)
+        }
+
+        val askedForPdf = Regex("(pdf|بي دي اف|بي دي إف)", RegexOption.IGNORE_CASE).containsMatchIn(userPrompt)
+        if (!askedForPdf && !text.contains("```cintra-pdf")) {
+            val askedForTextOrPrompt = Regex("(برومبت|prompt|ملف\\s*نصي|ملف\\s*تكست|\\.txt|\\.md|markdown)", RegexOption.IGNORE_CASE)
+                .containsMatchIn(userPrompt)
+            val isVeryLong = text.length >= 2600
+            if ((askedForTextOrPrompt && text.length >= 700) || isVeryLong) {
+                val clean = text.replace(Regex("```genui-[a-z-]+\\s*[\\s\\S]*?(?:```|$)"), "").trim()
+                val looksLikeMd = clean.contains("\n#") || clean.contains("\n##") || clean.contains("|---") || clean.contains("**")
+                val ext = if (looksLikeMd) "md" else "txt"
+                val mime = if (looksLikeMd) "text/markdown" else "text/plain"
+                val stamp = System.currentTimeMillis() % 100000
+                return GeneratedGenericFile(
+                    title = if (askedForTextOrPrompt) "ملف ${ext.uppercase()} جاهز" else "نسخة نصية من الرد (${ext.uppercase()})",
+                    fileName = "Cintra_${stamp}.$ext",
+                    mimeType = mime,
+                    content = clean,
+                    summary = "تم تجهيز النص تلقائياً كملف .$ext للتحميل والمشاركة",
+                )
+            }
         }
         return null
     }

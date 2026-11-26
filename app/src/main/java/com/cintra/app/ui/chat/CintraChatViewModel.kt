@@ -343,7 +343,27 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
         it.copy(attachments = it.attachments.filterIndexed { i, _ -> i != index })
     }
 
-    fun onComposerTextChange(text: String) = _state.update { it.copy(composerText = text) }
+    fun onComposerTextChange(text: String) {
+        if (text.length >= 1800) {
+            val nextIdx = _state.value.attachments.count { it.type == AttachmentType.FILE } + 1
+            val att = Attachment(
+                type = AttachmentType.FILE,
+                name = "pasted_text_$nextIdx.txt",
+                mimeType = "text/plain",
+                extractedText = text,
+                isLoading = false,
+            )
+            _state.update { s ->
+                s.copy(
+                    composerText = "",
+                    attachments = s.attachments + att,
+                    toast = if (s.isArabic) "تم تحويل النص الطويل تلقائياً إلى ملف .txt مرفق" else "Long text converted to .txt attachment",
+                )
+            }
+        } else {
+            _state.update { it.copy(composerText = text) }
+        }
+    }
 
     fun setMicRecording(recording: Boolean) = _state.update { it.copy(isRecordingMic = recording) }
 
@@ -549,6 +569,9 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
 
                     is AiStreamChunk.WebPhotosReady ->
                         updateActiveMessage(assistantId) { it.copy(webPhotos = chunk.photos) }
+
+                    is AiStreamChunk.SourcesReady ->
+                        updateActiveMessage(assistantId) { it.copy(webSources = chunk.sources) }
 
                     is AiStreamChunk.ContentDelta -> {
                         pendingContent.append(chunk.text)
