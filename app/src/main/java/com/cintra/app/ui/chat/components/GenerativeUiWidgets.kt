@@ -86,6 +86,8 @@ fun RealWebPhotosCarousel(photos: List<WebPhotoItem>) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         photos.forEach { photo ->
+            var loadFailed by remember(photo.url) { mutableStateOf(false) }
+            if (loadFailed) return@forEach
             Box(
                 modifier = Modifier
                     .width(210.dp)
@@ -98,6 +100,7 @@ fun RealWebPhotosCarousel(photos: List<WebPhotoItem>) {
                     model = photo.url,
                     contentDescription = photo.title,
                     contentScale = ContentScale.Crop,
+                    onError = { loadFailed = true },
                     modifier = Modifier.matchParentSize(),
                 )
                 if (photo.title.isNotBlank()) {

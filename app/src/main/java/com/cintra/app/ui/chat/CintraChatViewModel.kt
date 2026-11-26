@@ -2,6 +2,7 @@ package com.cintra.app.ui.chat
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cintra.app.data.AiStreamService
@@ -22,6 +23,8 @@ import com.cintra.app.ui.model.GenUi
 import com.cintra.app.ui.pages.CintraProject
 import com.cintra.app.ui.auth.AuthMode
 import com.cintra.app.ui.pages.FeatureDestination
+import com.cintra.app.service.CintraBackgroundService
+import com.cintra.app.utils.CintraAttachmentReader
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -298,6 +301,44 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
         it.copy(attachments = it.attachments + attachment, plusMenuOpen = false)
     }
 
+    fun attachUri(uri: Uri, type: AttachmentType) {
+        val ctx = getApplication<Application>()
+        val uriStr = uri.toString()
+        val initialName = CintraAttachmentReader.queryDisplayName(
+            context = ctx,
+            uri = uri,
+            fallback = if (type == AttachmentType.PHOTO) "صورة" else "ملف",
+        )
+        val placeholder = Attachment(
+            type = type,
+            name = initialName,
+            uri = uriStr,
+            isLoading = true,
+        )
+        _state.update {
+            it.copy(attachments = it.attachments + placeholder, plusMenuOpen = false)
+        }
+        viewModelScope.launch {
+            val extracted = CintraAttachmentReader.extract(ctx, uri, isPhoto = type == AttachmentType.PHOTO)
+            _state.update { s ->
+                s.copy(
+                    attachments = s.attachments.map { att ->
+                        if (att.uri == uriStr) {
+                            att.copy(
+                                name = extracted.displayName,
+                                mimeType = extracted.mimeType,
+                                extractedText = extracted.textContent,
+                                imageDataUrl = extracted.imageDataUrl,
+                                pageCount = extracted.pageCount,
+                                isLoading = false,
+                            )
+                        } else att
+                    },
+                )
+            }
+        }
+    }
+
     fun removeAttachment(index: Int) = _state.update {
         it.copy(attachments = it.attachments.filterIndexed { i, _ -> i != index })
     }
@@ -428,6 +469,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
             reasoning = if (shouldShowThinking) "" else null,
             reasoningExpanded = shouldShowThinking,
             isStreaming = true,
+            liveStatus = if (usedAttachments.isNotEmpty()) "جارٍ قراءة الملف المرفق..." else "جارٍ تحليل طلبك...",
         )
 
         _state.update { s ->
@@ -460,6 +502,10 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
         val assistantId = assistantMessage.id
 
         streamJob?.cancel()
+        CintraBackgroundService.start(
+            getApplication(),
+            if (usedAttachments.isNotEmpty()) "جارٍ تحليل الملف وكتابة الرد في الخلفية..." else "جارٍ إكمال الرد في الخلفية...",
+        )
         streamJob = viewModelScope.launch {
             val pendingContent = StringBuilder()
             val pendingReasoning = StringBuilder()
@@ -467,7 +513,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
 
             fun flushBuffers(force: Boolean = false) {
                 val now = System.currentTimeMillis()
-                if (!force && now - lastFlushMs < 45L) return
+                if (!force && now - lastFlushMs < 75L) return
                 if (pendingContent.isEmpty() && pendingReasoning.isEmpty()) return
                 val cDelta = pendingContent.toString()
                 val rDelta = pendingReasoning.toString()
@@ -484,6 +530,9 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
 
             streamService.streamReply(request).collect { chunk ->
                 when (chunk) {
+                    is AiStreamChunk.StatusUpdate ->
+                        updateActiveMessage(assistantId) { it.copy(liveStatus = chunk.text) }
+
                     is AiStreamChunk.ReasoningDelta -> {
                         pendingReasoning.append(chunk.text)
                         flushBuffers()
@@ -509,11 +558,13 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                             it.copy(
                                 content = cleanContent,
                                 isStreaming = false,
+                                liveStatus = null,
                                 genUi = chunk.genUi ?: it.genUi,
                                 generatedPdf = chunk.generatedPdf ?: it.generatedPdf,
                             )
                         }
                         _state.update { s -> s.copy(isGenerating = false) }
+                        CintraBackgroundService.stop(getApplication())
                     }
                 }
             }
@@ -523,6 +574,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     fun stopGeneration() {
         streamJob?.cancel()
         streamJob = null
+        CintraBackgroundService.stop(getApplication())
         if (_state.value.isGenerating) {
             _state.update { s ->
                 val newSessions = s.sessions.map { session ->
@@ -538,7 +590,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun stripGenUiBlocks(md: String): String =
-        md.replace(Regex("```(?:genui-(?:checklist|comparison|image|grid)|cintra-pdf)[\\s\\S]*?```"), "").trim()
+        md.replace(Regex("```(?:genui-[a-z-]+|cintra-pdf)[\\s\\S]*?(?:```|$)"), "").trim()
 
     private inline fun updateActiveMessage(
         messageId: String,
@@ -554,5 +606,10 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
             }
             s.copy(sessions = newSessions)
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        CintraBackgroundService.stop(getApplication())
     }
 }

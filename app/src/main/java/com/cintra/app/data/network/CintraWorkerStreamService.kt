@@ -36,6 +36,18 @@ class CintraWorkerStreamService(
             return@flow
         }
 
+        val hasFiles = request.attachments.isNotEmpty()
+        emit(
+            AiStreamChunk.StatusUpdate(
+                when {
+                    hasFiles -> "جارٍ قراءة وتحليل المرفق..."
+                    request.tool?.name == "WEB" -> "جارٍ البحث في الويب..."
+                    request.tool?.name == "THINKING" -> "جارٍ التفكير العميق..."
+                    else -> "جارٍ تحليل طلبك..."
+                }
+            )
+        )
+
         val endpoint = "${CintraSecureVault.resolveEndpoint()}/v1/chat/stream"
         val appToken = CintraSecureVault.resolveAppToken()
         val modelKey = when (request.model.id) {
@@ -45,20 +57,54 @@ class CintraWorkerStreamService(
             CintraModelId.VISION -> "cintra-vision"
         }
 
+        // Build enriched user message including extracted file text & Vision images
+        val promptWithFiles = buildString {
+            append(request.prompt)
+            val textAttachments = request.attachments.filter { !it.extractedText.isNullOrBlank() }
+            if (textAttachments.isNotEmpty()) {
+                append("\n\n--- ATTACHED FILES ---")
+                textAttachments.forEach { att ->
+                    append("\n[File: ${att.name}]")
+                    if (att.pageCount != null) append(" (${att.pageCount} pages)")
+                    append("\n")
+                    append(att.extractedText?.take(18_000).orEmpty())
+                    append("\n--- END FILE ---")
+                }
+            }
+        }
+
+        val imageUrls = request.attachments.mapNotNull { it.imageDataUrl }.take(3)
+        val userMessageObj = JSONObject().apply {
+            put("role", "user")
+            if (imageUrls.isNotEmpty()) {
+                val contentParts = JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("type", "text")
+                        put("text", promptWithFiles)
+                    })
+                    imageUrls.forEach { dataUrl ->
+                        put(JSONObject().apply {
+                            put("type", "image_url")
+                            put("image_url", JSONObject().apply { put("url", dataUrl) })
+                        })
+                    }
+                }
+                put("content", contentParts)
+            } else {
+                put("content", promptWithFiles)
+            }
+        }
+
         val bodyJson = JSONObject().apply {
             put("model", modelKey)
             put("stream", true)
             put("tool", request.tool?.name?.lowercase() ?: JSONObject.NULL)
-            put("autoWebSearch", autoWebSearchProvider())
+            put("autoWebSearch", autoWebSearchProvider() && !hasFiles)
             put("generativeUi", true)
-            put("illustrativeImages", illustrativeImagesProvider())
+            put("illustrativeImages", illustrativeImagesProvider() && !hasFiles)
             put("customInstructions", customInstructionsProvider())
-            put("messages", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("role", "user")
-                    put("content", request.prompt)
-                })
-            })
+            put("rawPrompt", request.prompt)
+            put("messages", JSONArray().apply { put(userMessageObj) })
         }
 
         var conn: HttpURLConnection? = null
@@ -67,8 +113,8 @@ class CintraWorkerStreamService(
         try {
             conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 20_000
-                readTimeout = 90_000
+                connectTimeout = 25_000
+                readTimeout = 120_000
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "text/event-stream")
@@ -85,12 +131,13 @@ class CintraWorkerStreamService(
             if (code !in 200..299) {
                 val errBody = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 val errMsg = runCatching { JSONObject(errBody).optString("error") }.getOrDefault("")
-                emit(
-                    AiStreamChunk.ContentDelta(
-                        if (errMsg.isNotBlank()) "تعذّر إكمال الطلب ($code): $errMsg"
-                        else "تعذّر إكمال الطلب حالياً (رمز $code)."
-                    )
-                )
+                val friendly = when {
+                    code == 502 || code == 504 ->
+                        "خادم المزوّد تأخّر في الرد (رمز $code). جرّب التبديل إلى وضع `auto:fast` في لوحة التحكم أو أعد المحاولة الآن."
+                    errMsg.isNotBlank() -> "تعذّر إكمال الطلب ($code): $errMsg"
+                    else -> "تعذّر إكمال الطلب حالياً (رمز $code)."
+                }
+                emit(AiStreamChunk.ContentDelta(friendly))
                 emit(AiStreamChunk.Complete(genUi = null))
                 return@flow
             }
@@ -108,7 +155,14 @@ class CintraWorkerStreamService(
                     runCatching {
                         val json = JSONObject(data)
 
-                        // Real Web Photos pushed by Cintra Worker
+                        // Live status step pushed by Cintra Worker
+                        val statusText = json.optString("cintra_status", "")
+                        if (statusText.isNotEmpty()) {
+                            emit(AiStreamChunk.StatusUpdate(statusText))
+                            return@runCatching
+                        }
+
+                        // Real Web Photos pushed by Cintra Worker (only for visual/travel topics)
                         val photosArr = json.optJSONArray("cintra_photos")
                         if (photosArr != null && photosArr.length() > 0) {
                             val photos = (0 until photosArr.length()).mapNotNull { i ->
@@ -133,6 +187,9 @@ class CintraWorkerStreamService(
                         val reasoning = delta.optString("reasoning_content", "")
                             .ifEmpty { delta.optString("reasoning", "") }
                         if (reasoning.isNotEmpty()) {
+                            if (!hasReasoning) {
+                                emit(AiStreamChunk.StatusUpdate("جارٍ التفكير وترتيب الإجابة..."))
+                            }
                             hasReasoning = true
                             emit(AiStreamChunk.ReasoningDelta(reasoning))
                         }
@@ -161,7 +218,7 @@ class CintraWorkerStreamService(
                 )
             )
         } catch (_: Exception) {
-            emit(AiStreamChunk.ContentDelta("تعذّر الاتصال بالإنترنت. تحقق من اتصالك وحاول مرة أخرى."))
+            emit(AiStreamChunk.ContentDelta("تعذّر الاتصال بالإنترنت أو انتهت مهلة الخادم. حاول مرة أخرى."))
             emit(AiStreamChunk.Complete(genUi = null))
         } finally {
             conn?.disconnect()
@@ -169,7 +226,6 @@ class CintraWorkerStreamService(
     }.flowOn(Dispatchers.IO)
 
     private fun extractPdfFromMarkdown(text: String, userPrompt: String): GeneratedPdfDoc? {
-        // 1. Primary structured ```cintra-pdf ... ``` block emitted by AI
         Regex("```cintra-pdf\\s*([\\s\\S]*?)```").find(text)?.let { match ->
             val block = match.groupValues[1].trim()
             val parts = block.split("---HTML---", limit = 2)
@@ -194,17 +250,16 @@ class CintraWorkerStreamService(
             }
         }
 
-        // 2. Smart fallback: if the user explicitly asked for a PDF file, auto-build a downloadable PDF card
         val askedForPdf = Regex("(pdf|بي دي اف|بي دي إف|ملف\\s+تقرير|ملف\\s+ملخص|فاتورة\\s+pdf)", RegexOption.IGNORE_CASE)
             .containsMatchIn(userPrompt)
-        if (askedForPdf && text.length > 120) {
-            val cleanMd = text.replace(Regex("```genui-(?:checklist|comparison|image|grid)[\\s\\S]*?```"), "").trim()
+        if (askedForPdf && text.length > 100 && !text.startsWith("خادم المزوّد") && !text.startsWith("تعذّر")) {
+            val cleanMd = text.replace(Regex("```(?:genui-[a-z-]+|cintra-pdf)[\\s\\S]*?(?:```|$)"), "").trim()
             val title = userPrompt.take(42).trim()
             return GeneratedPdfDoc(
                 title = title,
                 fileName = "Cintra_${System.currentTimeMillis() % 100000}.pdf",
                 htmlContent = CintraPdfExporter.buildArabicHtmlFromMarkdown(title, cleanMd),
-                summary = "تم تحويل الشرح تلقائياً إلى ملف PDF جاهز للتحميل",
+                summary = "تم تنسيق المحتوى تلقائياً في ملف PDF عربي جاهز للتحميل",
             )
         }
         return null

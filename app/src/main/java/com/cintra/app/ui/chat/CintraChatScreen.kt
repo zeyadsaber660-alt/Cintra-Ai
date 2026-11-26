@@ -132,11 +132,7 @@ private fun CintraChatScreenContent(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 5),
     ) { uris ->
         if (uris.isNotEmpty()) {
-            uris.forEachIndexed { idx, uri ->
-                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "صورة ${idx + 1}"
-                viewModel.addAttachment(Attachment(AttachmentType.PHOTO, name, uri.toString()))
-            }
-            viewModel.showToast("تم إرفاق ${uris.size} صورة")
+            uris.forEach { uri -> viewModel.attachUri(uri, AttachmentType.PHOTO) }
         }
     }
 
@@ -144,9 +140,7 @@ private fun CintraChatScreenContent(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "مستند"
-            viewModel.addAttachment(Attachment(AttachmentType.FILE, name, uri.toString()))
-            viewModel.showToast("تم إرفاق $name")
+            viewModel.attachUri(uri, AttachmentType.FILE)
         }
     }
 
@@ -458,6 +452,7 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
                 onTab = { tab -> viewModel.setComparisonTab(message.id, tab) },
                 onToggleCheck = { index -> viewModel.toggleChecklistItem(message.id, index) },
                 modifier = Modifier
+                    .animateItem()
                     .widthIn(max = 780.dp)
                     .fillMaxWidth(),
             )

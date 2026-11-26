@@ -19,6 +19,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,6 +50,15 @@ fun FloatingGlassTopBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        palette.canvas,
+                        palette.canvas.copy(alpha = 0.88f),
+                        Color.Transparent,
+                    ),
+                ),
+            )
             .statusBarsPadding()
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {

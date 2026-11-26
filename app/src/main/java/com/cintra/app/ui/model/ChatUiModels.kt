@@ -6,6 +6,11 @@ data class Attachment(
     val type: AttachmentType,
     val name: String,
     val uri: String? = null,
+    val mimeType: String = "",
+    val extractedText: String? = null,
+    val imageDataUrl: String? = null,
+    val pageCount: Int? = null,
+    val isLoading: Boolean = false,
 )
 
 enum class ActiveTool(val label: String) {
@@ -66,6 +71,7 @@ data class ChatMessage(
     val reasoning: String? = null,
     val reasoningExpanded: Boolean = false,
     val isStreaming: Boolean = false,
+    val liveStatus: String? = null,
     val attachments: List<Attachment> = emptyList(),
     val genUi: GenUi? = null,
     val webPhotos: List<WebPhotoItem> = emptyList(),
@@ -86,6 +92,7 @@ data class AiStreamRequest(
 )
 
 sealed interface AiStreamChunk {
+    data class StatusUpdate(val text: String) : AiStreamChunk
     data class ReasoningDelta(val text: String) : AiStreamChunk
     data class ContentDelta(val text: String) : AiStreamChunk
     data object ReasoningComplete : AiStreamChunk

@@ -1,6 +1,10 @@
 package com.cintra.app.ui.chat.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -84,8 +88,16 @@ fun MessageItem(
     fontScale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
+    val enterProgress = remember(message.id) { Animatable(0f) }
+    LaunchedEffect(message.id) {
+        enterProgress.animateTo(1f, spring(dampingRatio = 0.82f, stiffness = 420f))
+    }
+    val animatedMod = modifier.graphicsLayer {
+        alpha = enterProgress.value
+        translationY = (1f - enterProgress.value) * 24f
+    }
     if (message.isUser) {
-        UserBubble(message, modifier)
+        UserBubble(message, animatedMod)
     } else {
         AssistantRow(
             message = message,
@@ -97,7 +109,7 @@ fun MessageItem(
             onRegenerate = onRegenerate,
             onTab = onTab,
             onToggleCheck = onToggleCheck,
-            modifier = modifier,
+            modifier = animatedMod,
         )
     }
 }
@@ -186,24 +198,37 @@ private fun AssistantRow(
         }
 
         val isBuildingPdf = message.isStreaming && message.content.contains("```cintra-pdf")
+        val isBuildingGenUi = message.isStreaming && message.content.contains("```genui-")
         val visibleContent = remember(message.content, message.isStreaming) {
-            if (message.content.contains("```cintra-pdf")) {
-                message.content.substringBefore("```cintra-pdf").trim()
-            } else {
-                message.content
+            var cleaned = message.content
+            if (cleaned.contains("```cintra-pdf")) {
+                cleaned = cleaned.substringBefore("```cintra-pdf")
             }
+            if (cleaned.contains("```genui-")) {
+                cleaned = cleaned.substringBefore("```genui-")
+            }
+            cleaned.trim()
         }
 
         if (message.isStreaming && visibleContent.isEmpty() && !isBuildingPdf) {
-            CintraWaitingLoader()
+            CintraWaitingLoader(statusText = message.liveStatus ?: "جارٍ التحضير...")
         } else if (visibleContent.isNotEmpty()) {
-            MarkdownBody(
-                content = visibleContent,
-                streaming = message.isStreaming && !isBuildingPdf,
-                fontScale = fontScale,
-                onCopy = onCopy,
-                onOpenArtifacts = onOpenArtifacts,
-            )
+            if (message.isStreaming) {
+                // Zero-flicker lightweight streaming text (prevents Markdown AST/table jitter)
+                StreamingPlainBody(
+                    content = visibleContent,
+                    fontScale = fontScale,
+                    showCursor = !isBuildingPdf && !isBuildingGenUi,
+                )
+            } else {
+                MarkdownBody(
+                    content = visibleContent,
+                    streaming = false,
+                    fontScale = fontScale,
+                    onCopy = onCopy,
+                    onOpenArtifacts = onOpenArtifacts,
+                )
+            }
         }
 
         if (isBuildingPdf) {
@@ -344,7 +369,10 @@ private fun splitMarkdown(md: String): List<MdSegment> {
                 code.append(lines[i]).append("\n")
                 i++
             }
-            segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
+            val lowerLang = lang.lowercase()
+            if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf") {
+                segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
+            }
             i++
             continue
         }
@@ -490,8 +518,61 @@ private fun CintraMarkdownTable(
     }
 }
 
+
 @Composable
-private fun CintraWaitingLoader() {
+private fun CintraPdfBuildingPill() {
+    val palette = CintraThemePalette
+    val transition = rememberInfiniteTransition(label = "pdfBuild")
+    val alpha by transition.animateFloat(0.35f, 1f, infiniteRepeatable(tween(550), RepeatMode.Reverse), label = "pdfAlpha")
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(palette.surface)
+            .border(0.8.dp, palette.borderSubtle, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.PictureAsPdf,
+            contentDescription = null,
+            tint = Color(0xFFEF4444).copy(alpha = alpha),
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = "جارٍ تصميم وتجهيز ملف الـ PDF للتحميل...",
+            color = palette.textPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun StreamingPlainBody(
+    content: String,
+    fontScale: Float,
+    showCursor: Boolean,
+) {
+    val palette = CintraThemePalette
+    val display = remember(content) {
+        content
+            .replace(Regex("^#{1,4}\s*", RegexOption.MULTILINE), "")
+            .replace("**", "")
+    }
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = display,
+            color = palette.textPrimary,
+            fontSize = (15f * fontScale).sp,
+            lineHeight = (24.5f * fontScale).sp,
+        )
+        if (showCursor) StreamingCursor()
+    }
+}
+
+@Composable
+private fun CintraWaitingLoader(statusText: String = "جارٍ التحضير...") {
     val palette = CintraThemePalette
     val transition = rememberInfiniteTransition(label = "waitingWave")
     val p1 by transition.animateFloat(0.25f, 1f, infiniteRepeatable(tween(520, delayMillis = 0), RepeatMode.Reverse), label = "d1")
@@ -516,7 +597,7 @@ private fun CintraWaitingLoader() {
             )
         }
         Text(
-            text = "جارٍ التحضير...",
+            text = statusText,
             color = palette.textSecondary,
             fontSize = 12.5.sp,
             fontWeight = FontWeight.Medium,
@@ -646,14 +727,4 @@ private fun highlightKotlin(code: String): AnnotatedString = buildAnnotatedStrin
         last = match.range.last + 1
     }
     append(code, last, code.length)
-}
-@Composable
-private fun CintraPdfBuildingPill() {
-    val palette = CintraThemePalette
-    val transition = rememberInfiniteTransition(label = "pdfBuild")
-    val alpha by transition.animateFloat(0.35f, 1f, infiniteRepeatable(tween(550), RepeatMode.Reverse), label = "pdfAlpha")
-    Row(modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(palette.surface).border(0.8.dp, palette.borderSubtle, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(imageVector = Icons.Rounded.PictureAsPdf, contentDescription = null, tint = Color(0xFFEF4444).copy(alpha = alpha), modifier = Modifier.size(18.dp))
-        Text(text = "جارٍ تصميم وتجهيز ملف الـ PDF للتحميل...", color = palette.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-    }
 }

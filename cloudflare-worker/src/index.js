@@ -11,53 +11,20 @@
 
 const CONFIG_KEY = "cintra_models_config_v2";
 
-const SMART_UI_DIRECTIVE = `
-You are Cintra, an intelligent bilingual Arabic/English AI assistant.
-- Always match the user's language (Arabic RTL or English LTR) cleanly and naturally.
-- Use rich Markdown (headings, tables, blockquotes, syntax-highlighted code blocks) whenever helpful.
-- For plans or steps, optionally append:
-\`\`\`genui-checklist
-[{"text": "Step 1", "done": false}, {"text": "Step 2", "done": false}]
-\`\`\`
-- For numeric comparisons (0-100), optionally append:
-\`\`\`genui-comparison
-{"الأداء": [{"label": "Option A", "value": 94}, {"label": "Option B", "value": 85}]}
-\`\`\`
-- When explaining 2 to 4 key concepts, shapes, or categories, optionally append a 2x2 visual card grid (tones: blue, green, amber, slate):
-\`\`\`genui-grid
-{"title": "المفاهيم الأساسية", "items": [{"title": "Start / End", "subtitle": "بداية أو نهاية", "tone": "green"}, {"title": "Process", "subtitle": "عملية أو حساب", "tone": "blue"}]}
-\`\`\`
-- **PDF File Generation**: Whenever the user asks you to create, export, write, or generate a PDF file (e.g., "اعمل ملف PDF", "جهزلي ملخص PDF", "تقرير PDF", "فاتورة PDF", "create a PDF"):
-  1. Write a concise, friendly 1-2 sentence intro in the user's language explaining what the PDF contains.
-  2. Immediately append a fenced \`cintra-pdf\` block with a complete, beautifully styled Arabic RTL (\`<html dir="rtl" lang="ar">\`) or English LTR HTML+CSS document using Google Fonts (\`Cairo\` or \`Tajawal\`), clean headers, tables, callout cards, and print-ready colors:
-\`\`\`cintra-pdf
-TITLE: عنوان المستند
-FILENAME: document_name.pdf
-SUMMARY: وصف مختصر لمحتوى الملف في سطر واحد
----HTML---
-<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-  <meta charset="UTF-8" />
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
-  <style>
-    body { font-family: 'Cairo', sans-serif; color: #0F172A; background: #FFFFFF; padding: 36px 40px; line-height: 1.85; }
-    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284C7; padding-bottom: 12px; margin-bottom: 22px; }
-    h1 { font-size: 22px; margin: 0; color: #0F172A; }
-    h2 { font-size: 17px; color: #0369A1; margin-top: 18px; }
-    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
-    th { background: #F1F5F9; padding: 10px; text-align: right; border-bottom: 2px solid #CBD5E1; }
-    td { padding: 10px; border-bottom: 1px solid #E2E8F0; }
-    .callout { background: #F0F9FF; border-right: 4px solid #0284C7; padding: 12px 16px; border-radius: 8px; margin: 14px 0; }
-  </style>
-</head>
-<body>
-  <!-- Full structured content here -->
-</body>
-</html>
-\`\`\`
-  Never say "I cannot create PDF files"—always emit the \`cintra-pdf\` block so the Cintra app renders a downloadable PDF card directly in chat!
-`;
+const SMART_UI_DIRECTIVE = [
+  "You are Cintra, a sharp bilingual Arabic/English AI assistant.",
+  "- Match the user's language (Arabic RTL or English LTR) naturally and concisely.",
+  "- When files or images are attached, analyze their actual content directly and clearly.",
+  "- Use clean Markdown (headings, concise tables, code blocks).",
+  "- ONLY when the user explicitly asks to create/export a PDF file, write a 1-sentence intro then append:",
+  "```cintra-pdf",
+  "TITLE: عنوان المستند",
+  "FILENAME: report.pdf",
+  "SUMMARY: وصف مختصر",
+  "---HTML---",
+  '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"/><style>body{font-family:Cairo,sans-serif;padding:34px;line-height:1.8;color:#0F172A}h1{font-size:21px;border-bottom:2px solid #0284C7;padding-bottom:8px}h2{font-size:16px;color:#0369A1}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{padding:8px 10px;border-bottom:1px solid #E2E8F0;text-align:right}th{background:#F1F5F9}</style></head><body><!-- content --></body></html>',
+  "```"
+].join("\n");
 
 const DEFAULT_CONFIG = {
   searchApiKey: "",
@@ -110,17 +77,17 @@ function jsonResponse(data, status = 200) {
 }
 
 async function loadConfig(env) {
-  if (!env.CINTRA_CONFIG) return structuredClone(DEFAULT_CONFIG);
+  if (!env.CINTRA_CONFIG) return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   const raw = await env.CINTRA_CONFIG.get(CONFIG_KEY);
-  if (!raw) return structuredClone(DEFAULT_CONFIG);
+  if (!raw) return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   try {
     const parsed = JSON.parse(raw);
     return {
       searchApiKey: parsed.searchApiKey || "",
-      models: { ...structuredClone(DEFAULT_CONFIG.models), ...(parsed.models || {}) }
+      models: { ...JSON.parse(JSON.stringify(DEFAULT_CONFIG.models)), ...(parsed.models || {}) }
     };
-  } catch {
-    return structuredClone(DEFAULT_CONFIG);
+  } catch (_e) {
+    return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
 }
 
@@ -167,13 +134,19 @@ async function runAutoWebSearch(query, tavilyApiKey) {
       const d = await ddg.json();
       if (d.AbstractText) return `${d.Heading || ""}: ${d.AbstractText} (${d.AbstractURL || ""})`;
     }
-  } catch {}
+  } catch (_e) {}
   return "";
 }
 
 
+function needsRealWebPhotos(prompt) {
+  if (!prompt || prompt.trim().length < 6) return false;
+  if (/^(اهلا|أهلا|أهلاً|مرحبا|مرحباً|هاي|هلو|السلام|ازيك|إزيك|اي ده|إيه ده|hello|hi|hey)\b/i.test(prompt.trim())) return false;
+  return /(سفر|السفر|سياحة|السياحة|معالم|أماكن|اماكن|مدينة|مدن|صور|صورة|ألمانيا|المانيا|تركيا|أمريكا|امريكا|نيويورك|باريس|لندن|دبي|مصر|القاهرة|اليابان|إيطاليا|ايطاليا|جبل|شاطئ|travel|visit|city|landmarks|places|photos|germany|turkey|usa|paris|dubai)/i.test(prompt);
+}
+
 async function fetchRealWebPhotos(query, tavilyApiKey) {
-  if (!query || query.length < 3) return [];
+  if (!needsRealWebPhotos(query)) return [];
   const photos = [];
   try {
     if (tavilyApiKey) {
@@ -205,7 +178,7 @@ async function fetchRealWebPhotos(query, tavilyApiKey) {
         if (photos.length >= 4) break;
       }
     }
-  } catch {}
+  } catch (_e) {}
   return photos;
 }
 
@@ -316,7 +289,10 @@ export default {
       }
 
       const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
-      const lastUserPrompt = [...incomingMessages].reverse().find((m) => m.role === "user")?.content || "";
+      const rawUserMsg = [...incomingMessages].reverse().find((m) => m.role === "user")?.content;
+      const lastUserPrompt = typeof body.rawPrompt === "string" && body.rawPrompt.trim()
+        ? body.rawPrompt.trim()
+        : (typeof rawUserMsg === "string" ? rawUserMsg : "");
 
       let webContext = "";
       if (needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false)) {
@@ -352,12 +328,16 @@ export default {
         ? await fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey)
         : [];
 
-      if (webPhotos.length > 0 && upstreamResp.body) {
+      if (upstreamResp.body) {
         const encoder = new TextEncoder();
-        const prelude = encoder.encode(`data: ${JSON.stringify({ cintra_photos: webPhotos })}\n\n`);
         const stream = new ReadableStream({
           async start(controller) {
-            controller.enqueue(prelude);
+            if (webContext) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_status: "تم جلب نتائج الويب • جارٍ صياغة الإجابة..." })}\n\n`));
+            }
+            if (webPhotos.length > 0) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_photos: webPhotos })}\n\n`));
+            }
             const reader = upstreamResp.body.getReader();
             try {
               while (true) {
@@ -545,6 +525,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
   <script>
     const PRESETS = [
+      { name: 'Nexora Fast (أسرع)', url: 'https://nexora-llm.onrender.com/v1', model: 'auto:fast' },
+      { name: 'Nexora Auto', url: 'https://nexora-llm.onrender.com/v1', model: 'auto' },
       { name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
       { name: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-reasoner' },
       { name: 'Qwen', url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
@@ -577,36 +559,25 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
       for (const [key, m] of Object.entries(models)) {
         const card = document.createElement('div');
         card.className = 'model-card';
-        card.innerHTML = \`
-          <div class="model-head">
-            <div>
-              <strong style="font-size:16px;">\${m.label}</strong>
-              <span style="font-size:12px;color:var(--muted);margin-right:6px;">\${key}</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span class="badge \${m.hasKey ? 'badge-ok' : 'badge-warn'}">\${m.hasKey ? 'متصل • ' + m.apiKeyMasked : 'بدون مفتاح'}</span>
-              <button class="btn btn-soft" type="button" data-test="\${key}">اختبار API</button>
-            </div>
-          </div>
-
-          <div class="preset-row">
-            \${PRESETS.map((p, i) => \`<button class="preset-chip" type="button" data-preset="\${key}:\${i}">\${p.name}</button>\`).join('')}
-          </div>
-
-          <div class="field">
-            <label>Base URL (OpenAI-Compatible)</label>
-            <input data-k="\${key}" data-f="baseUrl" value="\${m.baseUrl || ''}" dir="ltr" />
-          </div>
-          <div class="field">
-            <label>Model ID</label>
-            <input data-k="\${key}" data-f="modelId" value="\${m.modelId || ''}" dir="ltr" />
-          </div>
-          <div class="field">
-            <label>API Key (اتركه فارغاً للإبقاء على المفتاح المحفوظ)</label>
-            <input data-k="\${key}" data-f="apiKey" type="password" placeholder="sk-..." dir="ltr" />
-          </div>
-          <div class="test-result" id="res-\${key}"></div>
-        \`;
+        var presetsHtml = PRESETS.map(function (p, i) {
+          return '<button class="preset-chip" type="button" data-preset="' + key + ':' + i + '">' + p.name + '</button>';
+        }).join('');
+        card.innerHTML =
+          '<div class="model-head">' +
+            '<div>' +
+              '<strong style="font-size:16px;">' + m.label + '</strong>' +
+              '<span style="font-size:12px;color:var(--muted);margin-right:6px;">' + key + '</span>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;">' +
+              '<span class="badge ' + (m.hasKey ? 'badge-ok' : 'badge-warn') + '">' + (m.hasKey ? 'متصل • ' + m.apiKeyMasked : 'بدون مفتاح') + '</span>' +
+              '<button class="btn btn-soft" type="button" data-test="' + key + '">اختبار API</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="preset-row">' + presetsHtml + '</div>' +
+          '<div class="field"><label>Base URL (OpenAI-Compatible)</label><input data-k="' + key + '" data-f="baseUrl" value="' + (m.baseUrl || '') + '" dir="ltr" /></div>' +
+          '<div class="field"><label>Model ID</label><input data-k="' + key + '" data-f="modelId" value="' + (m.modelId || '') + '" dir="ltr" /></div>' +
+          '<div class="field"><label>API Key (اتركه فارغاً للإبقاء على المفتاح المحفوظ)</label><input data-k="' + key + '" data-f="apiKey" type="password" placeholder="sk-..." dir="ltr" /></div>' +
+          '<div class="test-result" id="res-' + key + '"></div>';
         grid.appendChild(card);
       }
     }
@@ -616,8 +587,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
       if (presetBtn) {
         const [key, idx] = presetBtn.getAttribute('data-preset').split(':');
         const p = PRESETS[Number(idx)];
-        document.querySelector(\`input[data-k="\${key}"][data-f="baseUrl"]\`).value = p.url;
-        document.querySelector(\`input[data-k="\${key}"][data-f="modelId"]\`).value = p.model;
+        document.querySelector('input[data-k="' + key + '"][data-f="baseUrl"]').value = p.url;
+        document.querySelector('input[data-k="' + key + '"][data-f="modelId"]').value = p.model;
         notify('تم تعبئة إعدادات ' + p.name);
         return;
       }

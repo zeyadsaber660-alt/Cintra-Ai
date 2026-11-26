@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -296,20 +297,28 @@ private fun ActiveStrip(
                             .clip(RoundedCornerShape(8.dp)),
                     )
                 } else {
-                    Icon(
-                        imageVector = if (att.type == AttachmentType.PHOTO) CintraIcons.Images else CintraIcons.Folder,
-                        contentDescription = null,
-                        tint = palette.textSecondary,
-                        modifier = Modifier.size(15.dp),
-                    )
+                    if (att.isLoading) {
+                        CircularProgressIndicator(
+                            color = palette.accent,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(15.dp),
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (att.type == AttachmentType.PHOTO) CintraIcons.Images else CintraIcons.Folder,
+                            contentDescription = null,
+                            tint = if (att.name.endsWith(".pdf", true)) Color(0xFFEF4444) else palette.accent,
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
                 }
                 Text(
-                    text = att.name,
+                    text = if (att.isLoading) "جارٍ قراءة ${att.name}..." else att.name,
                     color = palette.textPrimary,
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 120.dp),
+                    modifier = Modifier.widthIn(max = 165.dp),
                 )
                 Icon(
                     imageVector = CintraIcons.Close,
