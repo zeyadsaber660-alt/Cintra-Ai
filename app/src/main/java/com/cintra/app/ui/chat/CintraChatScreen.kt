@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -424,11 +425,22 @@ private fun CintraChatScreenContent(
 private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel) {
     val messages = state.messages
     val context = LocalContext.current
+    val palette = CintraThemePalette
     val listState = rememberLazyListState()
-    val lastStreaming = messages.lastOrNull()?.isStreaming == true
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(messages.size, lastStreaming) {
-        if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
+    val showScrollDown by remember {
+        derivedStateOf {
+            val total = listState.layoutInfo.totalItemsCount
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            total > 0 && lastVisible < total - 1
+        }
+    }
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty() && !showScrollDown) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
     }
 
     if (messages.isEmpty()) {
@@ -436,40 +448,73 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
         return
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 74.dp,
-            bottom = 148.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        items(messages, key = { it.id }) { message ->
-            MessageItem(
-                message = message,
-                onToggleReasoning = { viewModel.toggleReasoningExpanded(message.id) },
-                onCopy = { viewModel.showToast("تم النسخ"); copyToClipboard(context, it) },
-                onExportPdf = { md ->
-                    val html = CintraPdfExporter.buildArabicHtmlFromMarkdown("تقرير Cintra AI", md)
-                    CintraPdfExporter.exportHtmlToPdf(context, html, "Cintra_Response_${System.currentTimeMillis()}")
-                },
-                fontScale = state.fontScale,
-                onOpenArtifacts = { lang, code ->
-                    viewModel.openArtifacts("Artifact — ${lang.uppercase()}", code)
-                },
-                onRegenerate = { viewModel.regenerate(message.id) },
-                onTab = { tab -> viewModel.setComparisonTab(message.id, tab) },
-                onToggleCheck = { index -> viewModel.toggleChecklistItem(message.id, index) },
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 74.dp,
+                bottom = 152.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            items(messages, key = { it.id }) { message ->
+                MessageItem(
+                    message = message,
+                    onToggleReasoning = { viewModel.toggleReasoningExpanded(message.id) },
+                    onCopy = { viewModel.showToast("تم النسخ"); copyToClipboard(context, it) },
+                    onExportPdf = { md ->
+                        val html = CintraPdfExporter.buildArabicHtmlFromMarkdown("تقرير Cintra AI", md)
+                        CintraPdfExporter.exportHtmlToPdf(context, html, "Cintra_Response_${System.currentTimeMillis()}")
+                    },
+                    fontScale = state.fontScale,
+                    onOpenArtifacts = { lang, code ->
+                        viewModel.openArtifacts("Artifact — ${lang.uppercase()}", code)
+                    },
+                    onRegenerate = { viewModel.regenerate(message.id) },
+                    onTab = { tab -> viewModel.setComparisonTab(message.id, tab) },
+                    onToggleCheck = { index -> viewModel.toggleChecklistItem(message.id, index) },
+                    modifier = Modifier
+                        .animateItem()
+                        .widthIn(max = 780.dp)
+                        .fillMaxWidth(),
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showScrollDown,
+            enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.85f, animationSpec = tween(180)),
+            exit = fadeOut(tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 96.dp),
+        ) {
+            Box(
                 modifier = Modifier
-                    .animateItem()
-                    .widthIn(max = 780.dp)
-                    .fillMaxWidth(),
-            )
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(palette.surface.copy(alpha = 0.94f))
+                    .border(0.85.dp, palette.borderSubtle, CircleShape)
+                    .clickable {
+                        scope.launch {
+                            if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = CintraIcons.ChevronDown,
+                    contentDescription = "النزول للأسفل",
+                    tint = palette.textPrimary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }

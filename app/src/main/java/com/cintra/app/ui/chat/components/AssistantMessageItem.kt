@@ -1,6 +1,10 @@
 package com.cintra.app.ui.chat.components
 
+import android.graphics.Color as AndroidColor
+import android.webkit.WebView
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.LaunchedEffect
@@ -208,6 +212,11 @@ private fun AssistantRow(
             for (tag in listOf("```cintra-pdf", "```cintra-file", "```genui-")) {
                 if (cleaned.contains(tag)) cleaned = cleaned.substringBefore(tag)
             }
+            // Hide an unclosed ```cintra-svg block while it is still streaming
+            val lastSvg = cleaned.lastIndexOf("```cintra-svg")
+            if (lastSvg >= 0 && cleaned.indexOf("```", lastSvg + 13) < 0) {
+                cleaned = cleaned.substring(0, lastSvg)
+            }
             cleaned.trim()
         }
 
@@ -215,11 +224,20 @@ private fun AssistantRow(
             CintraWaitingLoader(statusText = message.liveStatus ?: "جارٍ التحضير...")
         } else if (visibleContent.isNotEmpty()) {
             if (message.isStreaming) {
-                // Render completed paragraphs & tables LIVE (zero flicker) + lightweight active tail
                 val splitIdx = visibleContent.lastIndexOf("\n\n")
-                if (splitIdx > 0) {
+                val tail = if (splitIdx > 0) visibleContent.substring(splitIdx + 2) else visibleContent
+                val tailHasTable = tail.trimStart().startsWith("|") && tail.contains("---")
+                if (tailHasTable) {
+                    // Render table row-by-row LIVE as soon as header + divider arrive!
+                    MarkdownBody(
+                        content = visibleContent,
+                        streaming = false,
+                        fontScale = fontScale,
+                        onCopy = onCopy,
+                        onOpenArtifacts = onOpenArtifacts,
+                    )
+                } else if (splitIdx > 0) {
                     val stablePart = visibleContent.substring(0, splitIdx)
-                    val activeTail = visibleContent.substring(splitIdx + 2)
                     MarkdownBody(
                         content = stablePart,
                         streaming = false,
@@ -227,14 +245,14 @@ private fun AssistantRow(
                         onCopy = onCopy,
                         onOpenArtifacts = onOpenArtifacts,
                     )
-                    if (activeTail.isNotBlank()) {
+                    if (tail.isNotBlank() && !tail.trimStart().startsWith("|")) {
                         StreamingPlainBody(
-                            content = activeTail,
+                            content = tail,
                             fontScale = fontScale,
                             showCursor = !isBuildingPdf && !isBuildingGenUi,
                         )
                     }
-                } else {
+                } else if (!tail.trimStart().startsWith("|")) {
                     StreamingPlainBody(
                         content = visibleContent,
                         fontScale = fontScale,
@@ -361,38 +379,50 @@ private sealed interface MdSegment {
     data class TableSegment(val headers: List<String>, val rows: List<List<String>>) : MdSegment
     data class CodeSegment(val lang: String, val code: String) : MdSegment
     data class CalloutSegment(val text: String) : MdSegment
+    data class MathSegment(val expr: String) : MdSegment
+    data class SvgSegment(val svg: String) : MdSegment
 }
 
 
-private fun formatReadableMath(input: String): String {
+private fun formatReadableMath(input: String, isolateLtr: Boolean = true): String {
     var s = input
-    // Strip LaTeX delimiters
-    s = s.replace("\u0024\u0024", "").replace("\\(", "").replace("\\)", "").replace("\\[", "").replace("\\]", "")
-    s = s.replace(Regex("\\u0024([^\\u0024\\n]+?)\\u0024")) { it.groupValues[1] }
-    // Fractions & square roots
-    s = s.replace(Regex("\\\\frac\\{([^\\}]+)\\}\\{([^\\}]+)\\}"), "($1)/($2)")
-    s = s.replace(Regex("\\\\sqrt\\{([^}]+)\\}"), "√($1)")
-    s = s.replace(Regex("\\\\overline\\{([^}]+)\\}"), "$1′")
-    s = s.replace(Regex("\\\\(?:text|mathrm|mathbf)\\{([^}]+)\\}"), "$1")
-    // Blackboard bold & calligraphic sets
-    val replacements = listOf(
-        "\\mathbb{N}" to "ℕ", "\\mathbb{Z}" to "ℤ", "\\mathbb{Q}" to "ℚ",
-        "\\mathbb{R}" to "ℝ", "\\mathbb{C}" to "ℂ", "\\mathcal{P}" to "𝒫",
-        "\\varnothing" to "∅", "\\emptyset" to "∅",
-        "\\subseteq" to "⊆", "\\subset" to "⊂", "\\supseteq" to "⊇", "\\supset" to "⊃",
-        "\\notin" to "∉", "\\in" to "∈",
-        "\\cup" to "∪", "\\cap" to "∩", "\\setminus" to " \\ ",
-        "\\times" to "×", "\\triangle" to "△", "\\oplus" to "⊕",
-        "\\neq" to "≠", "\\leq" to "≤", "\\geq" to "≥",
-        "\\implies" to "⇒", "\\Rightarrow" to "⇒", "\\iff" to "⇔", "\\rightarrow" to "→",
-        "\\land" to "∧", "\\lor" to "∨", "\\neg" to "¬",
-        "\\forall" to "∀", "\\exists" to "∃", "\\infty" to "∞",
-        "\\cdots" to "…", "\\ldots" to "…", "\\dots" to "…",
-        "\\mid" to "|", "\\{" to "\u007B", "\\}" to "\u007D",
-    )
-    for ((k, v) in replacements) {
-        s = s.replace(k, v)
+        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+        .replace("\u0024\u0024", "")
+        .replace("\\(", "")
+        .replace("\\)", "")
+        .replace("\\[", "")
+        .replace("\\]", "")
+
+    fun convertSymbols(raw: String): String {
+        var r = raw
+        r = r.replace(Regex("\\\\frac\\{([^\\}]+)\\}\\{([^\\}]+)\\}"), "($1) / ($2)")
+        r = r.replace(Regex("\\\\sqrt\\{([^\\}]+)\\}"), "√($1)")
+        r = r.replace(Regex("\\\\overline\\{([^\\}]+)\\}"), "$1′")
+        r = r.replace(Regex("\\\\(?:text|mathrm|mathbf)\\{([^\\}]+)\\}"), "$1")
+        val replacements = listOf(
+            "\\mathbb{N}" to "ℕ", "\\mathbb{Z}" to "ℤ", "\\mathbb{Q}" to "ℚ",
+            "\\mathbb{R}" to "ℝ", "\\mathbb{C}" to "ℂ", "\\mathcal{P}" to "𝒫",
+            "\\varnothing" to "∅", "\\emptyset" to "∅",
+            "\\subseteq" to "⊆", "\\subset" to "⊂", "\\supseteq" to "⊇", "\\supset" to "⊃",
+            "\\notin" to "∉", "\\in" to "∈",
+            "\\cup" to "∪", "\\cap" to "∩", "\\setminus" to " \\ ",
+            "\\times" to "×", "\\triangle" to "△", "\\oplus" to "⊕",
+            "\\neq" to "≠", "\\leq" to "≤", "\\geq" to "≥",
+            "\\implies" to "⇒", "\\Rightarrow" to "⇒", "\\iff" to "⇔", "\\rightarrow" to "→",
+            "\\land" to "∧", "\\lor" to "∨", "\\neg" to "¬",
+            "\\forall" to "∀", "\\exists" to "∃", "\\infty" to "∞",
+            "\\cdots" to "…", "\\ldots" to "…", "\\dots" to "…",
+            "\\mid" to "|", "\\{" to "\u007B", "\\}" to "\u007D",
+        )
+        for ((k, v) in replacements) r = r.replace(k, v)
+        return r
     }
+
+    s = s.replace(Regex("\\u0024([^\\u0024\\n]+?)\\u0024")) { m ->
+        val inner = convertSymbols(m.groupValues[1].trim())
+        if (isolateLtr) "\u2066$inner\u2069" else inner
+    }
+    s = convertSymbols(s)
     return s.replace("  ", " ")
 }
 
@@ -432,9 +462,35 @@ private fun splitMarkdown(md: String): List<MdSegment> {
                 i++
             }
             val lowerLang = lang.lowercase()
-            if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file") {
+            if (lowerLang == "cintra-svg" || lowerLang == "svg") {
+                val svgRaw = code.toString().trim()
+                if (svgRaw.contains("<svg", ignoreCase = true)) {
+                    segments.add(MdSegment.SvgSegment(svgRaw))
+                }
+            } else if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file") {
                 segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
             }
+            i++
+            continue
+        }
+
+        // 1a. Centered LTR Display Math Block ($$ ... $$)
+        if (trimmed.startsWith("\u0024\u0024")) {
+            flushText()
+            if (trimmed.length > 4 && trimmed.endsWith("\u0024\u0024")) {
+                segments.add(MdSegment.MathSegment(trimmed.removePrefix("\u0024\u0024").removeSuffix("\u0024\u0024").trim()))
+                i++
+                continue
+            }
+            val mathBuf = StringBuilder()
+            val firstLine = trimmed.removePrefix("\u0024\u0024").trim()
+            if (firstLine.isNotEmpty()) mathBuf.append(firstLine).append("\n")
+            i++
+            while (i < lines.size && !lines[i].trim().startsWith("\u0024\u0024")) {
+                mathBuf.append(lines[i].trim()).append("\n")
+                i++
+            }
+            segments.add(MdSegment.MathSegment(mathBuf.toString().trim()))
             i++
             continue
         }
@@ -513,6 +569,10 @@ private fun MarkdownBody(
                     CodeBlockCard(segment.lang, segment.code, onCopy, onOpenArtifacts)
                 is MdSegment.CalloutSegment ->
                     CintraCalloutBox(segment.text, fontScale)
+                is MdSegment.MathSegment ->
+                    CintraDisplayMathCard(segment.expr, fontScale)
+                is MdSegment.SvgSegment ->
+                    CintraInlineSvgCard(segment.svg)
             }
         }
         if (streaming) StreamingCursor()
@@ -523,6 +583,76 @@ private fun MarkdownBody(
  * Custom full-wrap Markdown table — never truncates cells with "...".
  * Uses clean thin dividers and horizontal scroll only when 3+ wide columns exist.
  */
+@Composable
+private fun CintraDisplayMathCard(expr: String, fontScale: Float) {
+    val palette = CintraThemePalette
+    val formatted = remember(expr) { formatReadableMath(expr, isolateLtr = false) }
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(palette.surface.copy(alpha = 0.72f))
+                .border(0.7.dp, palette.borderSubtle, RoundedCornerShape(14.dp))
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = formatted,
+                color = palette.textPrimary,
+                fontFamily = FontFamily.Serif,
+                fontSize = (17f * fontScale).sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                lineHeight = (26f * fontScale).sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CintraInlineSvgCard(svgMarkup: String) {
+    val palette = CintraThemePalette
+    val htmlDoc = remember(svgMarkup, palette.isDark) {
+        val bgHex = if (palette.isDark) "#141821" else "#F8FAFC"
+        """
+        <!DOCTYPE html>
+        <html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+        <style>
+          html,body{margin:0;padding:8px;width:100%;height:100%;box-sizing:border-box;background:$bgHex;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:sans-serif;}
+          svg{max-width:100%;max-height:100%;width:auto;height:auto;}
+        </style></head><body>$svgMarkup</body></html>
+        """.trimIndent()
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(205.dp)
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (palette.isDark) Color(0xFF141821) else Color(0xFFF8FAFC))
+            .border(0.8.dp, palette.borderSubtle, RoundedCornerShape(18.dp)),
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    setBackgroundColor(AndroidColor.TRANSPARENT)
+                    settings.javaScriptEnabled = false
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false
+                    loadDataWithBaseURL(null, htmlDoc, "text/html", "UTF-8", null)
+                }
+            },
+            update = { wv ->
+                wv.loadDataWithBaseURL(null, htmlDoc, "text/html", "UTF-8", null)
+            },
+            modifier = Modifier.fillMaxWidth().height(205.dp),
+        )
+    }
+}
+
 @Composable
 private fun CintraCalloutBox(text: String, fontScale: Float) {
     val palette = CintraThemePalette

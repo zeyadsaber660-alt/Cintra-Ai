@@ -21,9 +21,9 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 
 /**
- * Free, zero-overhead Arabic RTL HTML-to-PDF & multi-format file exporter for Android.
- * Fixes high-DPI WebView scaling (`setInitialScale(100)` + explicit 794px A4 viewport)
- * so downloaded PDFs match PrintManager's crisp proportions with zero cropping or UI lag.
+ * Free, zero-overhead Arabic RTL HTML + Tailwind CSS to PDF & multi-format exporter for Android.
+ * Enables JavaScript in the offscreen Chromium WebView so Tailwind Play CDN compiles all
+ * utility classes before crisp A4 multi-page PDF capture (off the UI thread).
  */
 object CintraPdfExporter {
 
@@ -37,25 +37,30 @@ object CintraPdfExporter {
     }
 
     /**
-     * Ensures any HTML document has `<html dir="rtl" lang="ar">`, fixed 794px A4 viewport
-     * (preventing 3x DPI zoom/crop on high-res phones), and rich Cairo/Tajawal styling.
+     * Ensures any HTML document has `<html dir="rtl" lang="ar">`, fixed 794px A4 viewport,
+     * Tailwind CSS Play CDN, Cairo/Tajawal Google Fonts, and clean offline fallback CSS.
      */
     fun ensureFullArabicHtml(title: String, rawHtml: String): String {
         val trimmed = rawHtml.trim()
         val viewportMeta = """<meta name="viewport" content="width=794, initial-scale=1.0, maximum-scale=1.0" />"""
+        val tailwindScript = """<script src="https://cdn.tailwindcss.com"></script>"""
         val fontLinks = """<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />"""
-        val safeResetCss = """<style>html,body{width:794px;max-width:794px;margin:0 auto;box-sizing:border-box;overflow-x:hidden;-webkit-text-size-adjust:100%;}*{box-sizing:border-box;}table,tr,blockquote,.card,.callout{page-break-inside:avoid;break-inside:avoid;}</style>"""
+        val safeResetCss = """<style>html,body{width:794px;max-width:794px;margin:0 auto;box-sizing:border-box;overflow-x:hidden;font-family:'Cairo','Tajawal',sans-serif;-webkit-text-size-adjust:100%;background:#FFFFFF;color:#0F172A;}*{box-sizing:border-box;}table,tr,blockquote,.card,.callout{page-break-inside:avoid;break-inside:avoid;}</style>"""
 
         if (trimmed.contains("<html", ignoreCase = true) && trimmed.contains("</html>", ignoreCase = true)) {
+            val hasTailwind = trimmed.contains("tailwindcss", ignoreCase = true)
+            val inject = buildString {
+                append("\n").append(viewportMeta)
+                if (!hasTailwind) append("\n").append(tailwindScript)
+                append("\n").append(fontLinks)
+                append("\n").append(safeResetCss)
+            }
             return if (trimmed.contains("<head", ignoreCase = true)) {
-                trimmed.replaceFirst(
-                    Regex("<head[^>]*>", RegexOption.IGNORE_CASE),
-                    "$0\n$viewportMeta\n$fontLinks\n$safeResetCss",
-                )
+                trimmed.replaceFirst(Regex("<head[^>]*>", RegexOption.IGNORE_CASE), "$0$inject")
             } else {
                 trimmed.replaceFirst(
                     Regex("<html[^>]*>", RegexOption.IGNORE_CASE),
-                    "$0\n<head><meta charset=\"UTF-8\" />$viewportMeta$fontLinks$safeResetCss</head>",
+                    "$0\n<head><meta charset=\"UTF-8\" />$inject</head>",
                 )
             }
         }
@@ -66,42 +71,25 @@ object CintraPdfExporter {
             <head>
               <meta charset="UTF-8" />
               $viewportMeta
+              $tailwindScript
               $fontLinks
               $safeResetCss
               <style>
-                body {
-                  font-family: 'Cairo', 'Tajawal', sans-serif;
-                  color: #0F172A;
-                  background: #FFFFFF;
-                  padding: 36px 44px;
-                  line-height: 1.85;
-                  font-size: 14.5px;
-                }
-                .hero {
-                  background: linear-gradient(135deg, #0F172A 0%, #0369A1 100%);
-                  color: #FFFFFF;
-                  padding: 24px 28px;
-                  border-radius: 18px;
-                  margin-bottom: 24px;
-                  display: flex;
-                  justify-content: space-between;
-                  align-items: center;
-                }
+                body { padding: 36px 42px; line-height: 1.85; font-size: 14.5px; }
+                .hero { background: linear-gradient(135deg, #0F172A 0%, #0369A1 100%); color: #FFFFFF; padding: 24px 28px; border-radius: 18px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
                 .hero h1 { font-size: 22px; font-weight: 800; color: #FFFFFF; margin: 0; }
                 .hero-badge { background: rgba(255,255,255,0.18); color: #FFFFFF; padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-                h2 { font-size: 17px; color: #0369A1; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1.5px solid #E0F2FE; }
-                h3 { font-size: 15px; color: #1E293B; margin: 14px 0 6px; }
+                h2 { font-size: 17px; color: #0369A1; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1.5px solid #E0F2FE; font-weight: 700; }
+                h3 { font-size: 15px; color: #1E293B; margin: 14px 0 6px; font-weight: 700; }
                 table { width: 100%; border-collapse: collapse; margin: 16px 0; border-radius: 10px; overflow: hidden; }
                 th { background: #0F172A; color: #FFFFFF; padding: 10px 12px; text-align: right; font-weight: 700; font-size: 13px; }
                 td { padding: 10px 12px; border-bottom: 1px solid #E2E8F0; font-size: 13.5px; }
                 tr:nth-child(even) td { background: #F8FAFC; }
-                code { font-family: monospace; background: #EFF6FF; color: #1D4ED8; padding: 2px 6px; border-radius: 6px; direction: ltr; display: inline-block; }
-                pre { background: #0F172A; color: #E2E8F0; padding: 14px; border-radius: 12px; direction: ltr; font-size: 12px; white-space: pre-wrap; }
                 blockquote { border-right: 4px solid #0284C7; background: #F0F9FF; margin: 14px 0; padding: 12px 16px; border-radius: 10px; color: #0C4A6E; }
                 .doc-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #E2E8F0; font-size: 11px; color: #64748B; text-align: center; }
               </style>
             </head>
-            <body>
+            <body class="bg-white text-slate-900">
               <div class="hero">
                 <h1>$title</h1>
                 <span class="hero-badge">Cintra AI</span>
@@ -114,8 +102,8 @@ object CintraPdfExporter {
     }
 
     /**
-     * Renders Arabic RTL HTML via Chromium WebView into a crisp, properly-scaled A4 PDF
-     * (100% matching PrintManager proportions) and writes to `Downloads/Cintra/` off the UI thread.
+     * Renders Arabic RTL HTML + Tailwind CSS via Chromium WebView into a crisp A4 PDF
+     * and writes directly to `Downloads/Cintra/` off the UI thread.
      */
     fun downloadHtmlAsPdfToDownloads(
         context: Context,
@@ -136,7 +124,6 @@ object CintraPdfExporter {
 
                 val preparedHtml = ensureFullArabicHtml(safeBase, htmlContent)
 
-                // Exact A4 proportions at 96 DPI (1 CSS px = 1 WebView px via setInitialScale(100))
                 val pageWidthPx = 794
                 val pageHeightPx = 1123
                 val pdfWidthPt = 595
@@ -148,9 +135,10 @@ object CintraPdfExporter {
                 val webView = WebView(activity ?: context).apply {
                     setBackgroundColor(AndroidColor.WHITE)
                     alpha = 0f
-                    translationX = -10_000f // Keep offscreen so zero layout/touch interference
+                    translationX = -10_000f
                     setInitialScale(100)
-                    settings.javaScriptEnabled = false
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
                     settings.defaultTextEncodingName = "utf-8"
                     settings.useWideViewPort = true
                     settings.loadWithOverviewMode = false
@@ -168,6 +156,7 @@ object CintraPdfExporter {
                     override fun onPageFinished(view: WebView?, url: String?) {
                         if (finished) return
                         finished = true
+                        // Wait for Tailwind Play CDN + Google Fonts to finish layout
                         mainHandler.postDelayed({
                             try {
                                 val rawContentHeight = webView.contentHeight.coerceAtLeast(pageHeightPx)
@@ -199,7 +188,6 @@ object CintraPdfExporter {
                                 rootView?.removeView(webView)
                                 webView.destroy()
 
-                                // Write PDF bytes to MediaStore off the UI thread (zero lag!)
                                 Thread {
                                     try {
                                         val values = ContentValues().apply {
@@ -233,12 +221,12 @@ object CintraPdfExporter {
                                 runCatching { webView.destroy() }
                                 onError(e.message ?: "تعذّر إنشاء ملف PDF")
                             }
-                        }, 650L)
+                        }, 1150L)
                     }
                 }
 
                 webView.loadDataWithBaseURL(
-                    "https://fonts.googleapis.com",
+                    "https://cdn.tailwindcss.com",
                     preparedHtml,
                     "text/html",
                     "UTF-8",
@@ -250,10 +238,6 @@ object CintraPdfExporter {
         }
     }
 
-    /**
-     * Saves any AI-generated file (CSV, TXT, MD, HTML, JSON, Python, Kotlin, etc.)
-     * directly into `Downloads/Cintra/` off the UI thread.
-     */
     fun saveTextFileToDownloads(
         context: Context,
         fileName: String,
@@ -326,28 +310,38 @@ object CintraPdfExporter {
         fileName: String = "Cintra_Report",
         onReady: () -> Unit = {},
     ) {
+        val mainHandler = Handler(Looper.getMainLooper())
         val webView = WebView(context)
-        webView.settings.javaScriptEnabled = false
+        webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
         webView.settings.defaultTextEncodingName = "utf-8"
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager ?: return
-                val jobName = fileName.removeSuffix(".pdf")
-                val adapter = webView.createPrintDocumentAdapter(jobName)
-                val attributes = PrintAttributes.Builder()
-                    .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                    .setResolution(PrintAttributes.Resolution("pdf", "pdf", 300, 300))
-                    .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
-                    .build()
-                printManager.print(jobName, adapter, attributes)
-                onReady()
+                mainHandler.postDelayed({
+                    val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager ?: return@postDelayed
+                    val jobName = fileName.removeSuffix(".pdf")
+                    val adapter = webView.createPrintDocumentAdapter(jobName)
+                    val attributes = PrintAttributes.Builder()
+                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                        .setResolution(PrintAttributes.Resolution("pdf", "pdf", 300, 300))
+                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                        .build()
+                    printManager.print(jobName, adapter, attributes)
+                    onReady()
+                }, 900L)
             }
         }
 
-        webView.loadDataWithBaseURL("https://fonts.googleapis.com", ensureFullArabicHtml(fileName, htmlContent), "text/html", "UTF-8", null)
+        webView.loadDataWithBaseURL(
+            "https://cdn.tailwindcss.com",
+            ensureFullArabicHtml(fileName, htmlContent),
+            "text/html",
+            "UTF-8",
+            null,
+        )
     }
 
     fun buildArabicHtmlFromMarkdown(
@@ -373,31 +367,29 @@ object CintraPdfExporter {
         <html dir="rtl" lang="ar">
         <head>
           <meta charset="UTF-8" />
+          <script src="https://cdn.tailwindcss.com"></script>
           <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
-          <style>
-            body { font-family: 'Cairo', sans-serif; color: #0F172A; line-height: 1.75; padding: 36px; background: #fff; }
-            .top { background: linear-gradient(135deg, #0F172A, #0369A1); color: #fff; padding: 22px 26px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th { background: #0F172A; color: #fff; padding: 10px 12px; text-align: right; }
-            td { padding: 10px 12px; border-bottom: 1px solid #E2E8F0; }
-            tr:nth-child(even) td { background: #F8FAFC; }
-            .total { margin-top: 18px; background: #E0F2FE; color: #0369A1; padding: 14px 18px; border-radius: 12px; font-weight: 700; }
-          </style>
         </head>
-        <body>
-          <div class="top">
-            <div><h1 style="margin:0;font-size:21px;color:#fff;">تقرير وفاتورة تجريبية — Cintra AI</h1><p style="margin:4px 0 0;color:#BAE6FD;">تصدير عربي RTL كامل بخط Cairo</p></div>
-            <div style="text-align:left;color:#FFFFFF;font-weight:700;">#INV-2026-01</div>
+        <body class="bg-white text-slate-900 p-10" style="font-family:'Cairo',sans-serif;">
+          <div class="bg-gradient-to-l from-slate-900 to-sky-700 text-white p-6 rounded-2xl flex justify-between items-center mb-6">
+            <div>
+              <h1 class="text-2xl font-extrabold">تقرير تجريبي — Cintra AI</h1>
+              <p class="text-sky-200 text-sm mt-1">تصميم احترافي بـ HTML + Tailwind CSS وخط Cairo</p>
+            </div>
+            <span class="bg-white/20 px-4 py-1.5 rounded-full text-sm font-bold">#CINTRA-2026</span>
           </div>
-          <table>
-            <thead><tr><th>البند</th><th>الوصف</th><th>التكلفة</th></tr></thead>
+          <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-sky-50 border border-sky-200 p-4 rounded-xl"><div class="text-xs text-sky-700 font-semibold">المحرك</div><div class="text-lg font-bold mt-1">Tailwind + Chromium</div></div>
+            <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-xl"><div class="text-xs text-emerald-700 font-semibold">اللغة</div><div class="text-lg font-bold mt-1">عربي RTL كامل</div></div>
+            <div class="bg-amber-50 border border-amber-200 p-4 rounded-xl"><div class="text-xs text-amber-700 font-semibold">الجودة</div><div class="text-lg font-bold mt-1">A4 فائقة الوضوح</div></div>
+          </div>
+          <table class="w-full border-collapse rounded-xl overflow-hidden text-sm">
+            <thead><tr class="bg-slate-900 text-white"><th class="p-3 text-right">الميزة</th><th class="p-3 text-right">الوصف</th><th class="p-3 text-right">الحالة</th></tr></thead>
             <tbody>
-              <tr><td>تطوير تطبيق أندرويد</td><td>واجهة Liquid Glass + Jetpack Compose</td><td>مجاني</td></tr>
-              <tr><td>سيرفر Cloudflare Worker</td><td>بث SSE آمن + بحث ويب تلقائي</td><td>مجاني</td></tr>
-              <tr><td>محرك PDF العربي</td><td>دعم RTL وخطوط Google Fonts</td><td>مدمج</td></tr>
+              <tr class="border-b"><td class="p-3 font-bold">Tailwind CSS</td><td class="p-3">بطاقات وتدرجات وجداول احترافية</td><td class="p-3 text-emerald-700 font-bold">مفعّل</td></tr>
+              <tr class="bg-slate-50 border-b"><td class="p-3 font-bold">رسومات SVG</td><td class="p-3">أشكال توضيحية ومخططات فين</td><td class="p-3 text-emerald-700 font-bold">مفعّل</td></tr>
             </tbody>
           </table>
-          <div class="total">الحالة: جاهز للتصدير والطباعة بجودة عالية 100%</div>
         </body>
         </html>
     """.trimIndent()
