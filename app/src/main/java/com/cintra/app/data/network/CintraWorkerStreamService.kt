@@ -63,12 +63,13 @@ class CintraWorkerStreamService(
             append(request.prompt)
             val textAttachments = request.attachments.filter { !it.extractedText.isNullOrBlank() }
             if (textAttachments.isNotEmpty()) {
+                val perFileBudget = (28_000 / textAttachments.size).coerceAtLeast(6_000)
                 append("\n\n--- ATTACHED FILES ---")
                 textAttachments.forEach { att ->
                     append("\n[File: ${att.name}]")
                     if (att.pageCount != null) append(" (${att.pageCount} pages)")
                     append("\n")
-                    append(att.extractedText?.take(65_000).orEmpty())
+                    append(att.extractedText?.take(perFileBudget).orEmpty())
                     append("\n--- END FILE ---")
                 }
             }
@@ -113,7 +114,7 @@ class CintraWorkerStreamService(
                     if (cleaned.isNotEmpty()) {
                         put(JSONObject().apply {
                             put("role", if (msg.isUser) "user" else "assistant")
-                            put("content", cleaned.take(6_000))
+                            put("content", cleaned.take(1_800))
                         })
                     }
                 }
@@ -123,6 +124,7 @@ class CintraWorkerStreamService(
 
         var conn: HttpURLConnection? = null
         val fullContent = StringBuilder()
+        val fullReasoning = StringBuilder()
 
         try {
             conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
@@ -205,6 +207,7 @@ class CintraWorkerStreamService(
                                 emit(AiStreamChunk.StatusUpdate("جارٍ التفكير وترتيب الإجابة..."))
                             }
                             hasReasoning = true
+                            fullReasoning.append(reasoning)
                             emit(AiStreamChunk.ReasoningDelta(reasoning))
                         }
 
@@ -225,10 +228,18 @@ class CintraWorkerStreamService(
                 emit(AiStreamChunk.ReasoningComplete)
             }
             val finalText = fullContent.toString()
+            val pdfFromContent = extractPdfFromMarkdown(finalText)
+            val rescuedPdf = if (pdfFromContent == null && finalText.isBlank()) {
+                extractPdfFromMarkdown(fullReasoning.toString())
+            } else null
+            val finalPdf = pdfFromContent ?: rescuedPdf
+            if (finalText.isBlank() && rescuedPdf != null) {
+                emit(AiStreamChunk.ContentDelta("تم تجهيز ملف الـ PDF المطلوب بنجاح، يمكنك تحميله الآن:"))
+            }
             emit(
                 AiStreamChunk.Complete(
                     genUi = extractGenUiFromMarkdown(finalText),
-                    generatedPdf = extractPdfFromMarkdown(finalText, request.prompt),
+                    generatedPdf = finalPdf,
                     generatedFile = extractGenericFileFromMarkdown(finalText, request.prompt),
                 )
             )
@@ -277,45 +288,30 @@ class CintraWorkerStreamService(
         return null
     }
 
-    private fun extractPdfFromMarkdown(text: String, userPrompt: String): GeneratedPdfDoc? {
-        Regex("```cintra-pdf\\s*([\\s\\S]*?)```").find(text)?.let { match ->
-            val block = match.groupValues[1].trim()
-            val parts = block.split("---HTML---", limit = 2)
-            val metaText = parts.firstOrNull().orEmpty()
-            val rawHtml = parts.getOrNull(1)?.trim().orEmpty()
+    private fun extractPdfFromMarkdown(text: String): GeneratedPdfDoc? {
+        val match = Regex("```cintra-pdf\\s*([\\s\\S]*?)(?:```|$)").find(text) ?: return null
+        val block = match.groupValues[1].trim()
+        val parts = block.split("---HTML---", limit = 2)
+        val metaText = parts.firstOrNull().orEmpty()
+        val rawHtml = parts.getOrNull(1)?.trim().orEmpty()
+        if (rawHtml.length < 40) return null
 
-            val title = Regex("^TITLE:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
-                ?: "مستند Cintra AI"
-            val fileName = Regex("^FILENAME:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
-                ?.let { if (it.endsWith(".pdf", true)) it else "$it.pdf" }
-                ?: "Cintra_Document.pdf"
-            val summary = Regex("^SUMMARY:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
-                ?: "ملف PDF عربي RTL جاهز للتحميل"
+        val title = Regex("^TITLE:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
+            ?: "مستند Cintra AI"
+        val fileName = Regex("^FILENAME:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
+            ?.let { if (it.endsWith(".pdf", true)) it else "$it.pdf" }
+            ?: "Cintra_Document.pdf"
+        val summary = Regex("^SUMMARY:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
+            ?: "ملف PDF عربي RTL جاهز للتحميل"
+        val template = Regex("^TEMPLATE:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
+            ?: "study_guide"
 
-            if (rawHtml.isNotBlank()) {
-                return GeneratedPdfDoc(
-                    title = title,
-                    fileName = fileName,
-                    htmlContent = CintraPdfExporter.ensureFullArabicHtml(title, rawHtml),
-                    summary = summary,
-                )
-            }
-        }
-
-        val askedForPdf = Regex("(pdf|بي دي اف|بي دي إف|ملف\\s+تقرير|ملف\\s+ملخص|فاتورة\\s+pdf)", RegexOption.IGNORE_CASE)
-            .containsMatchIn(userPrompt)
-        val isQuestion = text.contains("هل يمكنك تحديد") || text.contains("ما الموضوع")
-        if (askedForPdf && !isQuestion && text.length > 140 && !text.startsWith("خادم المزوّد") && !text.startsWith("تعذّر")) {
-            val cleanMd = text.replace(Regex("```(?:genui-[a-z-]+|cintra-pdf)[\\s\\S]*?(?:```|$)"), "").trim()
-            val title = userPrompt.take(42).trim()
-            return GeneratedPdfDoc(
-                title = title,
-                fileName = "Cintra_${System.currentTimeMillis() % 100000}.pdf",
-                htmlContent = CintraPdfExporter.buildArabicHtmlFromMarkdown(title, cleanMd),
-                summary = "تم تنسيق المحتوى تلقائياً في ملف PDF عربي جاهز للتحميل",
-            )
-        }
-        return null
+        return GeneratedPdfDoc(
+            title = title,
+            fileName = fileName,
+            htmlContent = CintraPdfExporter.buildFromTemplate(title, summary, rawHtml, template),
+            summary = summary,
+        )
     }
 
     private fun extractGenUiFromMarkdown(text: String): GenUi? {

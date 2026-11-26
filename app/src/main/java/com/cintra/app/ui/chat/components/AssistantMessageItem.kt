@@ -16,7 +16,13 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -93,6 +99,8 @@ fun MessageItem(
     onRegenerate: () -> Unit,
     onTab: (String) -> Unit,
     onToggleCheck: (Int) -> Unit,
+    onEditUser: () -> Unit = {},
+    onResendUser: () -> Unit = {},
     fontScale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
@@ -105,7 +113,7 @@ fun MessageItem(
         translationY = (1f - enterProgress.value) * 24f
     }
     if (message.isUser) {
-        UserBubble(message, animatedMod)
+        UserBubble(message, onCopy, onEditUser, onResendUser, animatedMod)
     } else {
         AssistantRow(
             message = message,
@@ -122,41 +130,75 @@ fun MessageItem(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UserBubble(message: ChatMessage, modifier: Modifier) {
+private fun UserBubble(
+    message: ChatMessage,
+    onCopy: (String) -> Unit,
+    onEdit: () -> Unit,
+    onResend: () -> Unit,
+    modifier: Modifier,
+) {
     val palette = CintraThemePalette
     val bubbleShape = RoundedCornerShape(22.dp, 22.dp, 22.dp, 6.dp)
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 310.dp)
-                .clip(bubbleShape)
-                .background(palette.userBubble)
-                .border(0.75.dp, palette.borderSubtle, bubbleShape)
-                .padding(horizontal = 16.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            message.attachments.forEach { att ->
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(palette.surface)
-                        .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        if (att.type == AttachmentType.PHOTO) CintraIcons.Images else CintraIcons.Folder,
-                        contentDescription = null,
-                        tint = palette.textSecondary,
-                        modifier = Modifier.size(14.dp),
+        Box {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 310.dp)
+                    .clip(bubbleShape)
+                    .background(palette.userBubble)
+                    .border(0.75.dp, palette.borderSubtle, bubbleShape)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { menuExpanded = true },
                     )
-                    Text(att.name, color = palette.textSecondary, fontSize = 12.sp)
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                message.attachments.forEach { att ->
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(palette.surface)
+                            .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            if (att.type == AttachmentType.PHOTO) CintraIcons.Images else CintraIcons.Folder,
+                            contentDescription = null,
+                            tint = palette.textSecondary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(att.name, color = palette.textSecondary, fontSize = 12.sp)
+                    }
+                }
+                if (message.content.isNotEmpty()) {
+                    Text(message.content, color = palette.textPrimary, fontSize = 15.sp, lineHeight = 23.sp)
                 }
             }
-            if (message.content.isNotEmpty()) {
-                Text(message.content, color = palette.textPrimary, fontSize = 15.sp, lineHeight = 23.sp)
+
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                containerColor = palette.surface,
+            ) {
+                DropdownMenuItem(
+                    text = { Text("تعديل وإعادة إرسال", color = palette.textPrimary, fontSize = 13.5.sp) },
+                    onClick = { menuExpanded = false; onEdit() },
+                )
+                DropdownMenuItem(
+                    text = { Text("إعادة الإرسال", color = palette.textPrimary, fontSize = 13.5.sp) },
+                    onClick = { menuExpanded = false; onResend() },
+                )
+                DropdownMenuItem(
+                    text = { Text("نسخ الرسالة", color = palette.textPrimary, fontSize = 13.5.sp) },
+                    onClick = { menuExpanded = false; onCopy(message.content) },
+                )
             }
         }
     }
@@ -191,9 +233,11 @@ private fun AssistantRow(
             Text(message.modelName ?: "Cintra", color = palette.textSecondary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
         }
 
-        if (message.reasoning != null) {
+        val showThinking = !message.reasoning.isNullOrBlank() &&
+            (message.reasoning.length >= 60 || (message.isStreaming && message.content.isEmpty()))
+        if (showThinking) {
             ThinkingCard(
-                reasoning = message.reasoning,
+                reasoning = message.reasoning.orEmpty(),
                 expanded = message.reasoningExpanded,
                 streaming = message.isStreaming && message.content.isEmpty(),
                 onToggle = onToggleReasoning,
@@ -344,11 +388,26 @@ private fun ThinkingCard(
                     .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
             ) {
                 Box(Modifier.width(2.dp).fillMaxHeight().background(palette.accent))
+                val cleanSteps = remember(reasoning, streaming) {
+                    val steps = mutableListOf<String>()
+                    steps.add("• تحليل طلبك وسياق المحادثة")
+                    if (reasoning.contains("PDF", true) || reasoning.contains("html", true) || reasoning.contains("file", true)) {
+                        steps.add("• تجهيز بيئة التنسيق وقالب المستند")
+                    }
+                    if (reasoning.contains("svg", true) || reasoning.contains("diagram", true) || reasoning.contains("venn", true)) {
+                        steps.add("• إعداد الرسومات والأشكال التوضيحية")
+                    }
+                    if (reasoning.contains("search", true) || reasoning.contains("web", true) || reasoning.contains("source", true)) {
+                        steps.add("• مراجعة نتائج البحث والمصادر")
+                    }
+                    steps.add(if (streaming) "• جارٍ صياغة الرد النهائي..." else "• تم إكمال التحليل وتجهيز الإجابة")
+                    steps.joinToString("\n")
+                }
                 Text(
-                    reasoning,
+                    cleanSteps,
                     color = palette.textSecondary,
                     fontSize = 13.sp,
-                    lineHeight = 21.sp,
+                    lineHeight = 22.sp,
                     modifier = Modifier.weight(1f).padding(start = 12.dp),
                 )
             }

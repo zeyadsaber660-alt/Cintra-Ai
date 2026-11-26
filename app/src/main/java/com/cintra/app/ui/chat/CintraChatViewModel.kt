@@ -136,6 +136,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     val state: StateFlow<CintraChatUiState> = _state.asStateFlow()
 
     private var streamJob: Job? = null
+    private val localAttachmentCache = mutableMapOf<String, Attachment>()
 
     init {
         viewModelScope.launch {
@@ -304,6 +305,10 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     fun attachUri(uri: Uri, type: AttachmentType) {
         val ctx = getApplication<Application>()
         val uriStr = uri.toString()
+        localAttachmentCache[uriStr]?.let { cached ->
+            _state.update { it.copy(attachments = it.attachments + cached, plusMenuOpen = false) }
+            return
+        }
         val initialName = CintraAttachmentReader.queryDisplayName(
             context = ctx,
             uri = uri,
@@ -331,7 +336,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                                 imageDataUrl = extracted.imageDataUrl,
                                 pageCount = extracted.pageCount,
                                 isLoading = false,
-                            )
+                            ).also { localAttachmentCache[uriStr] = it }
                         } else att
                     },
                 )
@@ -446,16 +451,56 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
         val session = _state.value.activeSession ?: return
         val index = session.messages.indexOfFirst { it.id == messageId }
         if (index <= 0) return
-        val prevPrompt = session.messages[index - 1].content
+        val prevUserMsg = session.messages[index - 1]
         _state.update { s ->
             val newSessions = s.sessions.map {
                 if (it.id == s.activeSessionId) {
-                    it.copy(messages = it.messages.filterIndexed { i, _ -> i != index && i != index - 1 })
+                    it.copy(messages = it.messages.take(index - 1))
                 } else it
             }
-            s.copy(sessions = newSessions)
+            s.copy(
+                sessions = newSessions,
+                attachments = prevUserMsg.attachments,
+            )
         }
-        sendMessage(prevPrompt)
+        sendMessage(prevUserMsg.content)
+    }
+
+    fun editUserMessage(messageId: String) {
+        stopGeneration()
+        val session = _state.value.activeSession ?: return
+        val index = session.messages.indexOfFirst { it.id == messageId }
+        if (index < 0) return
+        val userMsg = session.messages[index]
+        _state.update { s ->
+            val newSessions = s.sessions.map {
+                if (it.id == s.activeSessionId) it.copy(messages = it.messages.take(index)) else it
+            }
+            s.copy(
+                sessions = newSessions,
+                composerText = userMsg.content,
+                attachments = userMsg.attachments,
+                toast = if (s.isArabic) "يمكنك تعديل الرسالة وإعادة إرسالها" else "Edit and resend your message",
+            )
+        }
+    }
+
+    fun resendUserMessage(messageId: String) {
+        if (_state.value.isGenerating) return
+        val session = _state.value.activeSession ?: return
+        val index = session.messages.indexOfFirst { it.id == messageId }
+        if (index < 0) return
+        val userMsg = session.messages[index]
+        _state.update { s ->
+            val newSessions = s.sessions.map {
+                if (it.id == s.activeSessionId) it.copy(messages = it.messages.take(index)) else it
+            }
+            s.copy(
+                sessions = newSessions,
+                attachments = userMsg.attachments,
+            )
+        }
+        sendMessage(userMsg.content)
     }
 
     fun sendMessage(forcedText: String? = null) {
@@ -515,7 +560,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
 
         val priorHistory = (_state.value.activeSession?.messages ?: emptyList())
             .filter { !it.isStreaming && it.id != userMessage.id && it.id != assistantMessage.id }
-            .takeLast(10)
+            .takeLast(6)
         val request = AiStreamRequest(
             prompt = finalPrompt,
             model = model,

@@ -62,7 +62,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -123,6 +128,7 @@ fun CintraChatScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CintraChatScreenContent(
     viewModel: CintraChatViewModel,
@@ -174,8 +180,16 @@ private fun CintraChatScreenContent(
         state.plusMenuOpen ||
         drawerState.isOpen
 
-    BackHandler(enabled = hasOpenOverlay) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val isImeVisible = WindowInsets.isImeVisible
+
+    BackHandler(enabled = isImeVisible || hasOpenOverlay) {
         when {
+            isImeVisible -> {
+                keyboardController?.hide()
+                focusManager.clearFocus()
+            }
             state.modelPickerOpen -> viewModel.closeModelPicker()
             state.artifactsOpen -> viewModel.closeArtifacts()
             state.isLiveActive -> viewModel.closeLive()
@@ -478,6 +492,8 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
                     onRegenerate = { viewModel.regenerate(message.id) },
                     onTab = { tab -> viewModel.setComparisonTab(message.id, tab) },
                     onToggleCheck = { index -> viewModel.toggleChecklistItem(message.id, index) },
+                    onEditUser = { viewModel.editUserMessage(message.id) },
+                    onResendUser = { viewModel.resendUserMessage(message.id) },
                     modifier = Modifier
                         .animateItem()
                         .widthIn(max = 780.dp)
