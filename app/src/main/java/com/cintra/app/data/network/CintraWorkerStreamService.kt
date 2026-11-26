@@ -229,7 +229,7 @@ class CintraWorkerStreamService(
                 AiStreamChunk.Complete(
                     genUi = extractGenUiFromMarkdown(finalText),
                     generatedPdf = extractPdfFromMarkdown(finalText, request.prompt),
-                    generatedFile = extractGenericFileFromMarkdown(finalText),
+                    generatedFile = extractGenericFileFromMarkdown(finalText, request.prompt),
                 )
             )
         } catch (_: Exception) {

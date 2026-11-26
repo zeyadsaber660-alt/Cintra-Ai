@@ -367,8 +367,8 @@ private sealed interface MdSegment {
 private fun formatReadableMath(input: String): String {
     var s = input
     // Strip LaTeX delimiters
-    s = s.replace("$$", "").replace("\\(", "").replace("\\)", "").replace("\\[", "").replace("\\]", "")
-    s = s.replace(Regex("\\$([^\\$\\n]+?)\\$")) { it.groupValues[1] }
+    s = s.replace("\u0024\u0024", "").replace("\\(", "").replace("\\)", "").replace("\\[", "").replace("\\]", "")
+    s = s.replace(Regex("\\u0024([^\\u0024\\n]+?)\\u0024")) { it.groupValues[1] }
     // Fractions & square roots
     s = s.replace(Regex("\\\\frac\\{([^\\}]+)\\}\\{([^\\}]+)\\}"), "($1)/($2)")
     s = s.replace(Regex("\\\\sqrt\\{([^}]+)\\}"), "√($1)")
