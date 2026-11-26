@@ -212,9 +212,7 @@ private fun AssistantRow(
         } else if (visibleContent.isNotEmpty()) {
             if (message.isStreaming) {
                 // Render completed paragraphs & tables LIVE (zero flicker) + lightweight active tail
-                val splitIdx = visibleContent.lastIndexOf("
-
-")
+                val splitIdx = visibleContent.lastIndexOf("\n\n")
                 if (splitIdx > 0) {
                     val stablePart = visibleContent.substring(0, splitIdx)
                     val activeTail = visibleContent.substring(splitIdx + 2)
@@ -405,8 +403,7 @@ private fun splitMarkdown(md: String): List<MdSegment> {
             flushText()
             val calloutBuf = StringBuilder()
             while (i < lines.size && lines[i].trim().startsWith(">")) {
-                calloutBuf.append(lines[i].trim().removePrefix(">").trim()).append("
-")
+                calloutBuf.append(lines[i].trim().removePrefix(">").trim()).append("\n")
                 i++
             }
             segments.add(MdSegment.CalloutSegment(calloutBuf.toString().trim()))
@@ -631,7 +628,7 @@ private fun StreamingPlainBody(
     val palette = CintraThemePalette
     val display = remember(content) {
         content
-            .replace(Regex("^#{1,4}\s*", RegexOption.MULTILINE), "")
+            .replace(Regex("^#{1,4}\\s*", RegexOption.MULTILINE), "")
             .replace("**", "")
     }
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {

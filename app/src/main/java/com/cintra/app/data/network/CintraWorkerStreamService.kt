@@ -227,6 +227,22 @@ class CintraWorkerStreamService(
         }
     }.flowOn(Dispatchers.IO)
 
+    private fun extractGenericFileFromMarkdown(text: String): GeneratedGenericFile? {
+        Regex("```cintra-file\\s*([\\s\\S]*?)```").find(text)?.let { match ->
+            val block = match.groupValues[1].trim()
+            val parts = block.split("---CONTENT---", limit = 2)
+            val meta = parts.firstOrNull().orEmpty()
+            val body = parts.getOrNull(1)?.trim().orEmpty()
+            if (body.isBlank()) return null
+            val title = Regex("^TITLE:\\s*(.+)$", RegexOption.MULTILINE).find(meta)?.groupValues?.get(1)?.trim() ?: "ملف جاهز للتحميل"
+            val fileName = Regex("^FILENAME:\\s*(.+)$", RegexOption.MULTILINE).find(meta)?.groupValues?.get(1)?.trim() ?: "cintra_file.txt"
+            val mime = Regex("^MIME:\\s*(.+)$", RegexOption.MULTILINE).find(meta)?.groupValues?.get(1)?.trim() ?: "text/plain"
+            val summary = Regex("^SUMMARY:\\s*(.+)$", RegexOption.MULTILINE).find(meta)?.groupValues?.get(1)?.trim() ?: "ملف مُنشأ بواسطة Cintra AI"
+            return GeneratedGenericFile(title, fileName, mime, body, summary)
+        }
+        return null
+    }
+
     private fun extractPdfFromMarkdown(text: String, userPrompt: String): GeneratedPdfDoc? {
         Regex("```cintra-pdf\\s*([\\s\\S]*?)```").find(text)?.let { match ->
             val block = match.groupValues[1].trim()
