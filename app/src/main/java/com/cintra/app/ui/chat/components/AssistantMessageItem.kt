@@ -197,15 +197,12 @@ private fun AssistantRow(
             RealWebPhotosCarousel(photos = message.webPhotos)
         }
 
-        val isBuildingPdf = message.isStreaming && message.content.contains("```cintra-pdf")
+        val isBuildingPdf = message.isStreaming && (message.content.contains("```cintra-pdf") || message.content.contains("```cintra-file"))
         val isBuildingGenUi = message.isStreaming && message.content.contains("```genui-")
         val visibleContent = remember(message.content, message.isStreaming) {
             var cleaned = message.content
-            if (cleaned.contains("```cintra-pdf")) {
-                cleaned = cleaned.substringBefore("```cintra-pdf")
-            }
-            if (cleaned.contains("```genui-")) {
-                cleaned = cleaned.substringBefore("```genui-")
+            for (tag in listOf("```cintra-pdf", "```cintra-file", "```genui-")) {
+                if (cleaned.contains(tag)) cleaned = cleaned.substringBefore(tag)
             }
             cleaned.trim()
         }
@@ -214,12 +211,34 @@ private fun AssistantRow(
             CintraWaitingLoader(statusText = message.liveStatus ?: "جارٍ التحضير...")
         } else if (visibleContent.isNotEmpty()) {
             if (message.isStreaming) {
-                // Zero-flicker lightweight streaming text (prevents Markdown AST/table jitter)
-                StreamingPlainBody(
-                    content = visibleContent,
-                    fontScale = fontScale,
-                    showCursor = !isBuildingPdf && !isBuildingGenUi,
-                )
+                // Render completed paragraphs & tables LIVE (zero flicker) + lightweight active tail
+                val splitIdx = visibleContent.lastIndexOf("
+
+")
+                if (splitIdx > 0) {
+                    val stablePart = visibleContent.substring(0, splitIdx)
+                    val activeTail = visibleContent.substring(splitIdx + 2)
+                    MarkdownBody(
+                        content = stablePart,
+                        streaming = false,
+                        fontScale = fontScale,
+                        onCopy = onCopy,
+                        onOpenArtifacts = onOpenArtifacts,
+                    )
+                    if (activeTail.isNotBlank()) {
+                        StreamingPlainBody(
+                            content = activeTail,
+                            fontScale = fontScale,
+                            showCursor = !isBuildingPdf && !isBuildingGenUi,
+                        )
+                    }
+                } else {
+                    StreamingPlainBody(
+                        content = visibleContent,
+                        fontScale = fontScale,
+                        showCursor = !isBuildingPdf && !isBuildingGenUi,
+                    )
+                }
             } else {
                 MarkdownBody(
                     content = visibleContent,
@@ -239,6 +258,10 @@ private fun AssistantRow(
             GeneratedPdfFileCard(pdf = message.generatedPdf)
         }
 
+        if (!message.isStreaming && message.generatedFile != null) {
+            GeneratedGenericFileCard(file = message.generatedFile)
+        }
+
         if (!message.isStreaming && message.genUi != null) {
             GenUiView(genUi = message.genUi, onTab = onTab, onToggleCheck = onToggleCheck)
         }
@@ -246,7 +269,6 @@ private fun AssistantRow(
         if (!message.isStreaming) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 MessageAction(Icons.Rounded.ContentCopy, "نسخ") { onCopy(message.content) }
-                MessageAction(Icons.Rounded.PictureAsPdf, "PDF") { onExportPdf(message.content) }
                 MessageAction(Icons.Rounded.Refresh, "إعادة", onRegenerate)
             }
         }
@@ -332,6 +354,7 @@ private sealed interface MdSegment {
     data class TextSegment(val md: String) : MdSegment
     data class TableSegment(val headers: List<String>, val rows: List<List<String>>) : MdSegment
     data class CodeSegment(val lang: String, val code: String) : MdSegment
+    data class CalloutSegment(val text: String) : MdSegment
 }
 
 private fun isTableDivider(line: String): Boolean {
@@ -370,10 +393,23 @@ private fun splitMarkdown(md: String): List<MdSegment> {
                 i++
             }
             val lowerLang = lang.lowercase()
-            if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf") {
+            if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file") {
                 segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
             }
             i++
+            continue
+        }
+
+        // 1b. Tinted Callout / Highlighted Answer Box (> ...)
+        if (trimmed.startsWith(">")) {
+            flushText()
+            val calloutBuf = StringBuilder()
+            while (i < lines.size && lines[i].trim().startsWith(">")) {
+                calloutBuf.append(lines[i].trim().removePrefix(">").trim()).append("
+")
+                i++
+            }
+            segments.add(MdSegment.CalloutSegment(calloutBuf.toString().trim()))
             continue
         }
 
@@ -428,7 +464,7 @@ private fun MarkdownBody(
                 is MdSegment.TextSegment ->
                     if (segment.md.isNotBlank()) {
                         Markdown(
-                            content = segment.md,
+                            content = segment.md.replace(Regex("==(.+?)=="), "`$1`"),
                             typography = cintraMdTypography,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -437,6 +473,8 @@ private fun MarkdownBody(
                     CintraMarkdownTable(segment.headers, segment.rows)
                 is MdSegment.CodeSegment ->
                     CodeBlockCard(segment.lang, segment.code, onCopy, onOpenArtifacts)
+                is MdSegment.CalloutSegment ->
+                    CintraCalloutBox(segment.text, fontScale)
             }
         }
         if (streaming) StreamingCursor()
@@ -447,6 +485,42 @@ private fun MarkdownBody(
  * Custom full-wrap Markdown table — never truncates cells with "...".
  * Uses clean thin dividers and horizontal scroll only when 3+ wide columns exist.
  */
+@Composable
+private fun CintraCalloutBox(text: String, fontScale: Float) {
+    val palette = CintraThemePalette
+    val isAnswer = text.contains("الإجابة") || text.contains("الناتج") || text.contains("الخلاصة") || text.contains("✓")
+    val isWarn = text.contains("ركز") || text.contains("تنبيه") || text.contains("ملاحظة") || text.contains("قاعدة")
+    val bg = when {
+        isAnswer -> if (palette.isDark) Color(0x2210B981) else Color(0xFFECFDF5)
+        isWarn -> if (palette.isDark) Color(0x22F59E0B) else Color(0xFFFFFBEB)
+        else -> if (palette.isDark) Color(0x2238BDF8) else Color(0xFFF0F9FF)
+    }
+    val bar = when {
+        isAnswer -> Color(0xFF10B981)
+        isWarn -> Color(0xFFF59E0B)
+        else -> palette.accent
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(bg)
+            .border(0.8.dp, bar.copy(alpha = 0.28f), RoundedCornerShape(16.dp))
+            .height(IntrinsicSize.Min),
+    ) {
+        Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(bar))
+        Text(
+            text = text.replace("**", "").replace("==", ""),
+            color = palette.textPrimary,
+            fontSize = (14.5f * fontScale).sp,
+            lineHeight = (23f * fontScale).sp,
+            fontWeight = if (isAnswer) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 12.dp),
+        )
+    }
+}
+
 @Composable
 private fun CintraMarkdownTable(
     headers: List<String>,
@@ -557,7 +631,7 @@ private fun StreamingPlainBody(
     val palette = CintraThemePalette
     val display = remember(content) {
         content
-            .replace(Regex("^#{1,4}\\s*", RegexOption.MULTILINE), "")
+            .replace(Regex("^#{1,4}\s*", RegexOption.MULTILINE), "")
             .replace("**", "")
     }
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {

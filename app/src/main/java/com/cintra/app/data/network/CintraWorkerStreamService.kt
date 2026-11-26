@@ -7,6 +7,7 @@ import com.cintra.app.ui.model.AiStreamRequest
 import com.cintra.app.ui.model.ChecklistItem
 import com.cintra.app.ui.model.CintraModelId
 import com.cintra.app.ui.model.GenUi
+import com.cintra.app.ui.model.GeneratedGenericFile
 import com.cintra.app.ui.model.GeneratedPdfDoc
 import com.cintra.app.ui.model.MetricItem
 import com.cintra.app.ui.model.VisualGridItem
@@ -67,7 +68,7 @@ class CintraWorkerStreamService(
                     append("\n[File: ${att.name}]")
                     if (att.pageCount != null) append(" (${att.pageCount} pages)")
                     append("\n")
-                    append(att.extractedText?.take(18_000).orEmpty())
+                    append(att.extractedText?.take(65_000).orEmpty())
                     append("\n--- END FILE ---")
                 }
             }
@@ -215,6 +216,7 @@ class CintraWorkerStreamService(
                 AiStreamChunk.Complete(
                     genUi = extractGenUiFromMarkdown(finalText),
                     generatedPdf = extractPdfFromMarkdown(finalText, request.prompt),
+                    generatedFile = extractGenericFileFromMarkdown(finalText),
                 )
             )
         } catch (_: Exception) {

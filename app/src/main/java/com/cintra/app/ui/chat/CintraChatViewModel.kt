@@ -561,6 +561,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                                 liveStatus = null,
                                 genUi = chunk.genUi ?: it.genUi,
                                 generatedPdf = chunk.generatedPdf ?: it.generatedPdf,
+                                generatedFile = chunk.generatedFile ?: it.generatedFile,
                             )
                         }
                         _state.update { s -> s.copy(isGenerating = false) }
@@ -590,7 +591,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun stripGenUiBlocks(md: String): String =
-        md.replace(Regex("```(?:genui-[a-z-]+|cintra-pdf)[\\s\\S]*?(?:```|$)"), "").trim()
+        md.replace(Regex("```(?:genui-[a-z-]+|cintra-pdf|cintra-file)[\\s\\S]*?(?:```|$)"), "").trim()
 
     private inline fun updateActiveMessage(
         messageId: String,

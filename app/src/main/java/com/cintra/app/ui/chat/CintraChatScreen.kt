@@ -10,7 +10,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -137,11 +143,9 @@ private fun CintraChatScreenContent(
     }
 
     val filePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) {
-            viewModel.attachUri(uri, AttachmentType.FILE)
-        }
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        uris.forEach { uri -> viewModel.attachUri(uri, AttachmentType.FILE) }
     }
 
     val speechLauncher = rememberLauncherForActivityResult(
@@ -207,7 +211,16 @@ private fun CintraChatScreenContent(
                         .layerBackdrop(backdrop)
                         .hazeSource(state = hazeState),
                 ) {
-                    ChatStream(state = state, viewModel = viewModel)
+                    AnimatedContent(
+                        targetState = state.activeSessionId,
+                        transitionSpec = {
+                            (fadeIn(tween(240)) + scaleIn(initialScale = 0.97f, animationSpec = tween(240)))
+                                .togetherWith(fadeOut(tween(150)))
+                        },
+                        label = "chatSwitch",
+                    ) { _ ->
+                        ChatStream(state = state, viewModel = viewModel)
+                    }
                 }
 
                 FloatingGlassTopBar(
@@ -247,7 +260,7 @@ private fun CintraChatScreenContent(
                             PlusAction.PHOTOS -> {
                                 viewModel.closePlusMenu()
                                 nativePhotoPicker.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
                                 )
                             }
                             PlusAction.FILES -> {
@@ -301,7 +314,7 @@ private fun CintraChatScreenContent(
             photos = state.allPhotos,
             isArabic = state.isArabic,
             onAddPhoto = {
-                nativePhotoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                nativePhotoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
             },
             onBack = viewModel::closeFeature,
         )

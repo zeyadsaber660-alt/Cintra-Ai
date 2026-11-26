@@ -50,6 +50,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.cintra.app.ui.model.GeneratedGenericFile
 import com.cintra.app.ui.model.GeneratedPdfDoc
 import com.cintra.app.utils.CintraPdfExporter
 import com.cintra.app.ui.model.WebPhotoItem
@@ -337,32 +338,158 @@ private fun ChecklistCard(checklist: GenUi.Checklist, onToggle: (Int) -> Unit) {
 @Composable
 private fun GeneratedImageCard(prompt: String) {
     val palette = CintraThemePalette
+    val imageUrl = remember(prompt) {
+        "https://image.pollinations.ai/prompt/${Uri.encode(prompt)}?width=1024&height=768&nologo=true"
+    }
+    var isLoading by remember(imageUrl) { mutableStateOf(true) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(palette.surface)
-            .border(0.8.dp, palette.borderSubtle, RoundedCornerShape(20.dp)),
+            .border(0.85.dp, palette.borderSubtle, RoundedCornerShape(20.dp)),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(170.dp)
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0C4A6E)),
-                    ),
-                ),
+                .height(230.dp)
+                .background(palette.surface2),
             contentAlignment = Alignment.Center,
         ) {
-            Text("معاينة تصور بصري", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = prompt,
+                contentScale = ContentScale.Crop,
+                onSuccess = { isLoading = false },
+                onError = { isLoading = false },
+                modifier = Modifier.matchParentSize(),
+            )
+            if (isLoading) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(color = palette.accent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    Text("جارٍ توليد الصورة...", color = palette.textSecondary, fontSize = 12.5.sp)
+                }
+            }
         }
         Text(
             text = prompt,
             color = palette.textSecondary,
-            fontSize = 12.5.sp,
-            modifier = Modifier.padding(12.dp),
+            fontSize = 12.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
         )
+    }
+}
+
+@Composable
+fun GeneratedGenericFileCard(file: GeneratedGenericFile) {
+    val palette = CintraThemePalette
+    val context = LocalContext.current
+    var isSaving by remember(file.fileName) { mutableStateOf(false) }
+    var savedUri by remember(file.fileName) { mutableStateOf<Uri?>(null) }
+    var savedName by remember(file.fileName) { mutableStateOf(file.fileName) }
+
+    val cardShape = RoundedCornerShape(22.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(palette.surface)
+            .border(0.9.dp, palette.borderSubtle, cardShape)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(palette.accent.copy(alpha = if (palette.isDark) 0.18f else 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CintraIcons.Folder, contentDescription = null, tint = palette.accent, modifier = Modifier.size(22.dp))
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(file.title, color = palette.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = if (savedUri != null) "تم الحفظ في التنزيلات/Cintra • $savedName" else file.fileName,
+                    color = if (savedUri != null) palette.emerald else palette.textMuted,
+                    fontSize = 11.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (savedUri == null) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(palette.accent)
+                        .clickable(enabled = !isSaving) {
+                            isSaving = true
+                            CintraPdfExporter.saveTextFileToDownloads(
+                                context = context,
+                                fileName = file.fileName,
+                                mimeType = file.mimeType,
+                                content = file.content,
+                                onSuccess = { uri, finalName ->
+                                    isSaving = false
+                                    savedUri = uri
+                                    savedName = finalName
+                                    Toast.makeText(context, "تم حفظ $finalName في التنزيلات", Toast.LENGTH_SHORT).show()
+                                },
+                                onError = { err ->
+                                    isSaving = false
+                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                },
+                            )
+                        }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(Icons.Rounded.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("تحميل ${file.fileName.substringAfterLast('.', "الملف").uppercase()}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(palette.emerald)
+                        .clickable { CintraPdfExporter.openFileUri(context, savedUri!!, file.mimeType) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(Icons.Rounded.OpenInNew, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("فتح الملف", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(palette.surface2)
+                        .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(14.dp))
+                        .clickable { CintraPdfExporter.shareFileUri(context, savedUri!!, file.title, file.mimeType) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.Share, contentDescription = "مشاركة", tint = palette.textPrimary, modifier = Modifier.size(17.dp))
+                }
+            }
+        }
     }
 }
 

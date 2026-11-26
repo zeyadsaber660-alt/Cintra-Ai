@@ -93,18 +93,10 @@ fun FloatingGlassComposer(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        palette.canvas.copy(alpha = 0.88f),
-                        palette.canvas,
-                    ),
-                ),
-            )
+            .background(palette.canvas.copy(alpha = 0.94f))
             .navigationBarsPadding()
             .imePadding()
-            .padding(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 10.dp),
+            .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 10.dp),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
@@ -130,12 +122,6 @@ fun FloatingGlassComposer(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(
-                        elevation = if (palette.isDark) 12.dp else 8.dp,
-                        shape = composerShape,
-                        ambientColor = Color.Black.copy(alpha = 0.14f),
-                        spotColor = Color.Black.copy(alpha = 0.14f),
-                    )
                     .clip(composerShape)
                     .background(frostedFill)
                     .border(0.9.dp, topRim, composerShape)
@@ -364,15 +350,32 @@ private fun MicButton(recording: Boolean, onClick: () -> Unit) {
 @Composable
 private fun PrimaryActionButton(mode: PrimaryMode, onClick: () -> Unit) {
     val palette = CintraThemePalette
+    val stopPulse = rememberInfiniteTransition(label = "stopRing")
+    val ringAlpha by stopPulse.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+        label = "stopAlpha",
+    )
+    val bgColor = when (mode) {
+        PrimaryMode.LIVE -> Color(0xFF00B894)
+        PrimaryMode.STOP -> Color(0xFFEF4444)
+        PrimaryMode.SEND -> palette.accentSolid
+    }
     Box(
         modifier = Modifier
-            .size(34.dp)
+            .size(36.dp)
             .clip(CircleShape)
-            .background(if (mode == PrimaryMode.LIVE) Color(0xFF00B894) else palette.accentSolid)
+            .then(
+                if (mode == PrimaryMode.STOP) {
+                    Modifier.border(2.dp, Color(0xFFEF4444).copy(alpha = ringAlpha), CircleShape)
+                } else Modifier
+            )
+            .background(bgColor)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Crossfade(targetState = mode, animationSpec = tween(160), label = "primaryMode") { m ->
+        Crossfade(targetState = mode, animationSpec = tween(150), label = "primaryMode") { m ->
             when (m) {
                 PrimaryMode.LIVE -> Icon(
                     imageVector = CintraIcons.Waveform,
@@ -386,11 +389,11 @@ private fun PrimaryActionButton(mode: PrimaryMode, onClick: () -> Unit) {
                     tint = palette.accentSolidText,
                     modifier = Modifier.size(18.dp),
                 )
-                PrimaryMode.STOP -> Icon(
-                    imageVector = CintraIcons.StopSquare,
-                    contentDescription = "إيقاف",
-                    tint = palette.accentSolidText,
-                    modifier = Modifier.size(14.dp),
+                PrimaryMode.STOP -> Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(RoundedCornerShape(3.5.dp))
+                        .background(Color.White),
                 )
             }
         }

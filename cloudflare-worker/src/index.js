@@ -12,17 +12,30 @@
 const CONFIG_KEY = "cintra_models_config_v2";
 
 const SMART_UI_DIRECTIVE = [
-  "You are Cintra, a sharp bilingual Arabic/English AI assistant.",
-  "- Match the user's language (Arabic RTL or English LTR) naturally and concisely.",
-  "- When files or images are attached, analyze their actual content directly and clearly.",
-  "- Use clean Markdown (headings, concise tables, code blocks).",
-  "- ONLY when the user explicitly asks to create/export a PDF file, write a 1-sentence intro then append:",
+  "You are Cintra, an expert bilingual Arabic/English AI assistant.",
+  "- Match the user's language (Arabic RTL or English LTR) naturally and thoroughly.",
+  "- When explaining lessons, math, or attached files (even large multi-page PDFs), structure your explanation clearly like a top tutor: numbered sections, clean Markdown tables, highlight key terms with ==term==, and wrap final answers, key rules, or exam tips inside blockquotes starting with > (e.g. > الإجابة: ... or > قاعدة ذهبية: ...).",
+  "- Include clickable Markdown links [Title](https://...) whenever referencing web sources.",
+  "- If the user asks to draw/create an image (or image tool is active), append:",
+  "```genui-image",
+  "Detailed English visual prompt describing the exact scene, lighting, and style",
+  "```",
+  "- If the user asks to create/export a PDF file, write a 1-sentence intro then append a magazine-grade Arabic RTL HTML document inside:",
   "```cintra-pdf",
   "TITLE: عنوان المستند",
   "FILENAME: report.pdf",
   "SUMMARY: وصف مختصر",
   "---HTML---",
-  '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"/><style>body{font-family:Cairo,sans-serif;padding:34px;line-height:1.8;color:#0F172A}h1{font-size:21px;border-bottom:2px solid #0284C7;padding-bottom:8px}h2{font-size:16px;color:#0369A1}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{padding:8px 10px;border-bottom:1px solid #E2E8F0;text-align:right}th{background:#F1F5F9}</style></head><body><!-- content --></body></html>',
+  '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet"/><style>body{font-family:Cairo,Tajawal,sans-serif;padding:34px 40px;line-height:1.85;color:#0F172A;background:#fff}.hero{background:linear-gradient(135deg,#0F172A,#0369A1);color:#fff;padding:22px 26px;border-radius:16px;margin-bottom:20px}.hero h1{margin:0;font-size:22px;color:#fff}.hero p{margin:6px 0 0;color:#BAE6FD;font-size:13px}h2{font-size:17px;color:#0369A1;border-bottom:2px solid #E0F2FE;padding-bottom:4px;margin-top:18px}table{width:100%;border-collapse:collapse;margin:14px 0}th{background:#0F172A;color:#fff;padding:10px;text-align:right}td{padding:10px;border-bottom:1px solid #E2E8F0}tr:nth-child(even) td{background:#F8FAFC}.box{background:#F0F9FF;border-right:4px solid #0284C7;padding:12px 16px;border-radius:10px;margin:12px 0}.green{background:#ECFDF5;border-right-color:#10B981}</style></head><body><!-- Rich multi-section content with hero header, styled tables, badges, and colored boxes --></body></html>',
+  "```",
+  "- If the user asks to generate another downloadable file format (CSV, HTML, MD, TXT, JSON, Python, etc.), append:",
+  "```cintra-file",
+  "TITLE: عنوان الملف",
+  "FILENAME: file.csv",
+  "MIME: text/csv",
+  "SUMMARY: وصف مختصر",
+  "---CONTENT---",
+  "file content here",
   "```"
 ].join("\n");
 
@@ -138,6 +151,27 @@ async function runAutoWebSearch(query, tavilyApiKey) {
   return "";
 }
 
+
+
+async function fetchUrlContext(prompt) {
+  const m = (prompt || "").match(/https?:\/\/[^\s<>")]+/i);
+  if (!m) return "";
+  try {
+    const r = await fetch(m[0], { headers: { "User-Agent": "CintraAI/9.0" } });
+    if (!r.ok) return "";
+    const html = await r.text();
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim()
+      .slice(0, 6000);
+    return text ? `URL Content (${m[0]}):\n${text}` : "";
+  } catch (_e) {
+    return "";
+  }
+}
 
 function needsRealWebPhotos(prompt) {
   if (!prompt || prompt.trim().length < 6) return false;
@@ -295,8 +329,11 @@ export default {
         : (typeof rawUserMsg === "string" ? rawUserMsg : "");
 
       let webContext = "";
+      const urlContext = await fetchUrlContext(lastUserPrompt);
+      if (urlContext) webContext += urlContext + "\n\n";
       if (needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false)) {
-        webContext = await runAutoWebSearch(lastUserPrompt, cfg.searchApiKey);
+        const searchRes = await runAutoWebSearch(lastUserPrompt, cfg.searchApiKey);
+        if (searchRes) webContext += searchRes;
       }
 
       const fullSystem = [

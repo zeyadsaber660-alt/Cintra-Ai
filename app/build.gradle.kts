@@ -71,6 +71,9 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
 
+    // Full-document PDF text extraction across all pages (ToUnicode CMap & Arabic RTL)
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
     // Flutter add-to-app
     implementation("com.cintra.flutter_glass:flutter_release:1.0")
 

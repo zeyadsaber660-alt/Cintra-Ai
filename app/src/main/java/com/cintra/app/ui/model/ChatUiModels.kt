@@ -42,6 +42,14 @@ data class GeneratedPdfDoc(
     val summary: String = "",
 )
 
+data class GeneratedGenericFile(
+    val title: String,
+    val fileName: String,
+    val mimeType: String,
+    val content: String,
+    val summary: String = "",
+)
+
 sealed interface GenUi {
     data class Comparison(
         val activeTab: String = "speed",
@@ -76,6 +84,7 @@ data class ChatMessage(
     val genUi: GenUi? = null,
     val webPhotos: List<WebPhotoItem> = emptyList(),
     val generatedPdf: GeneratedPdfDoc? = null,
+    val generatedFile: GeneratedGenericFile? = null,
 )
 
 data class ChatSession(
@@ -100,5 +109,6 @@ sealed interface AiStreamChunk {
     data class Complete(
         val genUi: GenUi?,
         val generatedPdf: GeneratedPdfDoc? = null,
+        val generatedFile: GeneratedGenericFile? = null,
     ) : AiStreamChunk
 }
