@@ -48,6 +48,13 @@ object CintraPdfExporter {
         s = s.replace(Regex("([A-Za-z0-9)}\u0600-\u06FF])\\^\\(([^()]{1,12})\\)"), "$1<sup>$2</sup>")
         s = s.replace(Regex("([A-Za-z0-9)}\u0600-\u06FF])\\^\\{([^\\{\\}]{1,12})\\}"), "$1<sup>$2</sup>")
         s = s.replace(Regex("([A-Za-z0-9)}])\\^(-?[A-Za-z0-9]{1,4})\\b"), "$1<sup>$2</sup>")
+        val entityFixes = listOf(
+            "&mathbb;N" to "ℕ", "&mathbb;Z" to "ℤ", "&mathbb;Q" to "ℚ",
+            "&mathbb;R" to "ℝ", "&mathbb;C" to "ℂ", "&mathcal;P" to "𝒫",
+            "\\mathbb{N}" to "ℕ", "\\mathbb{Z}" to "ℤ", "\\mathbb{Q}" to "ℚ",
+            "\\mathbb{R}" to "ℝ", "\\mathbb{C}" to "ℂ", "\\mathcal{P}" to "𝒫",
+        )
+        for ((k, v) in entityFixes) s = s.replace(k, v)
         return s
     }
 

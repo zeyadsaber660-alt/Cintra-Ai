@@ -15,7 +15,9 @@ const SMART_UI_DIRECTIVE = [
   "You are Cintra, a warm, crystal-clear bilingual Arabic/English AI tutor and assistant.",
   "- TOKEN EFFICIENCY RULE: Keep internal thinking under 40 words. NEVER write HTML, CSS, SVG, or full drafts inside thinking — put all code and answers directly in the final output.",
   "- For simple greetings (اهلا، مرحبا، hello), reply warmly in 1-2 short sentences with zero thinking.",
-  "- Write clean natural Arabic (never mix random French/broken English words).",
+  "- Write clean natural Arabic (never mix random French/broken English words). NEVER write HTML entities like &mathbb;N — ALWAYS use real Unicode symbols (ℕ, ℤ, ℚ, ℝ, ℂ, ∅, ∪, ∩, ⊆).",
+  "- When files/PDFs are attached, ALWAYS pull real examples, numbers, and exercises directly from the attached files.",
+  "- INTERACTIVE WIDGETS: When the user asks for a calculator (savings, GPA, bill split, unit converter), interactive chart/simulation, or mini quiz/game, emit a self-contained Arabic RTL HTML+Tailwind+JS interactive widget inside ```cintra-widget\n...\n``` (only when `illustrativeImages` is enabled).",
   "- For educational explanations: intuitive definition + centered math equations in $$...$$ using Unicode symbols (∪, ∩, ∈, ∉, ⊆, ∅, ℕ, ℤ, ℝ) + NEVER use <br> inside Markdown tables + optional compact ```cintra-svg``` diagram (Venn/flowchart) + > callout boxes for rules/answers + short practice question at the end.",
   "- PDF GENERATION (RICH & COMPLETE): The app has 4 built-in Tailwind+Cairo RTL templates (study_guide, report, invoice, cheat_sheet). When creating a study/midterm/report PDF, NEVER make a tiny superficial summary — write a rich, comprehensive, exam-ready document with: clear explanations of EVERY topic, multiple step-by-step solved numerical examples (مثال محلول), structured tables, common exam traps (أخطاء شائعة), and practice questions. Always use HTML <sup> for exponents (e.g. 2<sup>n</sup>, f<sup>-1</sup>, x<sup>2</sup> — NEVER write ^). Use <span class=\"math\"> for inline math inside sentences and <div class=\"math-block\"> ONLY for standalone centered equations. Emit inside:",
   "```cintra-pdf",
@@ -128,7 +130,7 @@ async function runAutoWebSearch(query, tavilyApiKey) {
       const resp = await fetch("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 5, include_answer: true, search_depth: "advanced" })
+        body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 5, include_answer: true, search_depth: "basic" })
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -154,8 +156,41 @@ async function runAutoWebSearch(query, tavilyApiKey) {
 async function fetchUrlContext(prompt) {
   const m = (prompt || "").match(/https?:\/\/[^\s<>")]+/i);
   if (!m) return "";
+  const targetUrl = m[0];
   try {
-    const r = await fetch(m[0], { headers: { "User-Agent": "CintraAI/9.0" } });
+    // YouTube video understanding: title, channel, description, and auto-captions if available
+    if (/(youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts)/i.test(targetUrl)) {
+      const [oembedResp, pageResp] = await Promise.all([
+        fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(targetUrl)}&format=json`).catch(() => null),
+        fetch(targetUrl, { headers: { "User-Agent": "Mozilla/5.0", "Accept-Language": "ar,en;q=0.9" } }).catch(() => null)
+      ]);
+      let info = "";
+      if (oembedResp && oembedResp.ok) {
+        const oe = await oembedResp.json();
+        info += `YouTube Video: ${oe.title || ""} | Channel: ${oe.author_name || ""}\n`;
+      }
+      if (pageResp && pageResp.ok) {
+        const html = await pageResp.text();
+        const descMatch = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
+        if (descMatch) {
+          const desc = descMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').slice(0, 2500);
+          info += `Description:\n${desc}\n`;
+        }
+        const capMatch = html.match(/"captionTracks":\[\{"baseUrl":"([^"]+)"/);
+        if (capMatch) {
+          const capUrl = capMatch[1].replace(/\\u0026/g, "&");
+          const capResp = await fetch(capUrl).catch(() => null);
+          if (capResp && capResp.ok) {
+            const xml = await capResp.text();
+            const transcript = xml.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 5000);
+            if (transcript) info += `Transcript:\n${transcript}\n`;
+          }
+        }
+      }
+      return info.trim();
+    }
+
+    const r = await fetch(targetUrl, { headers: { "User-Agent": "CintraAI/19.0" } });
     if (!r.ok) return "";
     const html = await r.text();
     const text = html
@@ -165,7 +200,7 @@ async function fetchUrlContext(prompt) {
       .replace(/\s{2,}/g, " ")
       .trim()
       .slice(0, 6000);
-    return text ? `URL Content (${m[0]}):\n${text}` : "";
+    return text ? `URL Content (${targetUrl}):\n${text}` : "";
   } catch (_e) {
     return "";
   }
@@ -361,15 +396,20 @@ export default {
         ? body.rawPrompt.trim()
         : (typeof rawUserMsg === "string" ? rawUserMsg : "");
 
+      const withTimeout = (promise, ms, fallback) =>
+        Promise.race([promise, new Promise((res) => setTimeout(() => res(fallback), ms))]);
+
+      const shouldSearch = needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false);
+      const [urlContext, searchRes, prefetchedPhotos] = await Promise.all([
+        withTimeout(fetchUrlContext(lastUserPrompt), 2800, ""),
+        shouldSearch ? withTimeout(runAutoWebSearch(lastUserPrompt, cfg.searchApiKey), 2800, { text: "", sources: [] }) : Promise.resolve({ text: "", sources: [] }),
+        body.illustrativeImages !== false ? withTimeout(fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey), 2200, []) : Promise.resolve([])
+      ]);
+
       let webContext = "";
-      let webSources = [];
-      const urlContext = await fetchUrlContext(lastUserPrompt);
+      let webSources = Array.isArray(searchRes?.sources) ? searchRes.sources : [];
       if (urlContext) webContext += urlContext + "\n\n";
-      if (needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false)) {
-        const searchRes = await runAutoWebSearch(lastUserPrompt, cfg.searchApiKey);
-        if (searchRes.text) webContext += searchRes.text;
-        if (Array.isArray(searchRes.sources)) webSources = searchRes.sources;
-      }
+      if (searchRes?.text) webContext += searchRes.text;
 
       const fullSystem = [
         route.systemPrompt || "",
@@ -397,9 +437,7 @@ export default {
         return jsonResponse({ error: `خطأ من المزود (${upstreamResp.status}): ${errText.slice(0, 220)}` }, upstreamResp.status);
       }
 
-      const webPhotos = body.illustrativeImages !== false
-        ? await fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey)
-        : [];
+      const webPhotos = prefetchedPhotos || [];
 
       if (upstreamResp.body) {
         const encoder = new TextEncoder();

@@ -225,8 +225,8 @@ fun CintraSettingsScreen(
                         if (matches("صور", "توضيحية", "generative", "images")) {
                             SettingsToggleRow(
                                 icon = CintraIcons.Images,
-                                title = if (isArabic) "الصور التوضيحية وGenerative UI" else "Illustrative Images & GenUI",
-                                subtitle = if (isArabic) "بطاقات تفاعلية وصور توضيحية مع الردود" else "Interactive cards & visual diagrams in replies",
+                                title = if (isArabic) "التخطيط والعناصر البصرية" else "Layout & Visuals",
+                                subtitle = if (isArabic) "الصور التوضيحية، الأدوات التفاعلية، والرسومات داخل الردود" else "Interactive calculators, diagrams & visuals in replies",
                                 checked = illustrativeImages,
                                 onToggle = onToggleIllustrativeImages,
                             )

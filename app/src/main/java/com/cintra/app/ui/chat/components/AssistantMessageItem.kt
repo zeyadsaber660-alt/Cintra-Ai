@@ -264,6 +264,10 @@ private fun AssistantRow(
             if (lastSvg >= 0 && cleaned.indexOf("```", lastSvg + 13) < 0) {
                 cleaned = cleaned.substring(0, lastSvg)
             }
+            val lastWidget = cleaned.lastIndexOf("```cintra-widget")
+            if (lastWidget >= 0 && cleaned.indexOf("```", lastWidget + 16) < 0) {
+                cleaned = cleaned.substring(0, lastWidget)
+            }
             cleaned.trim()
         }
 
@@ -447,6 +451,7 @@ private sealed interface MdSegment {
     data class CalloutSegment(val text: String) : MdSegment
     data class MathSegment(val expr: String) : MdSegment
     data class SvgSegment(val svg: String) : MdSegment
+    data class WidgetSegment(val html: String) : MdSegment
 }
 
 
@@ -466,6 +471,7 @@ private fun formatReadableMath(input: String, isolateLtr: Boolean = true): Strin
         r = r.replace(Regex("\\\\overline\\{([^\\}]+)\\}"), "$1′")
         r = r.replace(Regex("\\\\(?:text|mathrm|mathbf)\\{([^\\}]+)\\}"), "$1")
         val replacements = listOf(
+            "&mathbb;N" to "ℕ", "&mathbb;Z" to "ℤ", "&mathbb;Q" to "ℚ", "&mathbb;R" to "ℝ", "&mathbb;C" to "ℂ", "&mathcal;P" to "𝒫",
             "\\mathbb{N}" to "ℕ", "\\mathbb{Z}" to "ℤ", "\\mathbb{Q}" to "ℚ",
             "\\mathbb{R}" to "ℝ", "\\mathbb{C}" to "ℂ", "\\mathcal{P}" to "𝒫",
             "\\varnothing" to "∅", "\\emptyset" to "∅",
@@ -532,6 +538,11 @@ private fun splitMarkdown(md: String): List<MdSegment> {
                 val svgRaw = code.toString().trim()
                 if (svgRaw.contains("<svg", ignoreCase = true)) {
                     segments.add(MdSegment.SvgSegment(svgRaw))
+                }
+            } else if (lowerLang == "cintra-widget") {
+                val widgetHtml = code.toString().trim()
+                if (widgetHtml.isNotBlank()) {
+                    segments.add(MdSegment.WidgetSegment(widgetHtml))
                 }
             } else if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file" && lowerLang != "cintra-suggestions") {
                 segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
@@ -639,6 +650,8 @@ private fun MarkdownBody(
                     CintraDisplayMathCard(segment.expr, fontScale)
                 is MdSegment.SvgSegment ->
                     CintraInlineSvgCard(segment.svg)
+                is MdSegment.WidgetSegment ->
+                    CintraInteractiveWidgetCard(segment.html)
             }
         }
         if (streaming) StreamingCursor()
