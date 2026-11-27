@@ -55,6 +55,13 @@ object CintraPdfExporter {
             "\\mathbb{R}" to "ℝ", "\\mathbb{C}" to "ℂ", "\\mathcal{P}" to "𝒫",
         )
         for ((k, v) in entityFixes) s = s.replace(k, v)
+        // Convert residual Markdown inside PDF HTML into clean styled HTML
+        s = s.replace(Regex("```[a-zA-Z0-9_-]*\\n([\\s\\S]*?)```")) { m ->
+            "<pre style=\"direction:ltr;background:#0F172A;color:#E2E8F0;padding:12px 14px;border-radius:10px;font-family:monospace;font-size:12px;white-space:pre-wrap;margin:10px 0;\">" +
+                m.groupValues[1].replace("<", "&lt;").replace(">", "&gt;") + "</pre>"
+        }
+        s = s.replace(Regex("\\*\\*([^*\\n]+?)\\*\\*"), "<strong>$1</strong>")
+        s = s.replace(Regex("`([^`\\n]+?)`"), "<code style=\"direction:ltr;display:inline-block;background:#EFF6FF;color:#1D4ED8;padding:1px 6px;border-radius:6px;font-family:monospace;font-size:12.5px;\">$1</code>")
         return s
     }
 

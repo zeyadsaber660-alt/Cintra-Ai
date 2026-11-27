@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -52,7 +53,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import com.cintra.app.data.security.CintraSecureVault
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -116,14 +125,105 @@ fun CintraChatScreen(
     viewModel: CintraChatViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var maintenanceMessage by remember { mutableStateOf<String?>(null) }
+    var announcementBanner by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    LaunchedEffect(Unit) {
+        if (CintraSecureVault.isProvisioned()) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val conn = (URL("${CintraSecureVault.resolveEndpoint()}/v1/app/status").openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 8_000
+                        readTimeout = 8_000
+                    }
+                    if (conn.responseCode in 200..299) {
+                        val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                        val m = json.optJSONObject("maintenance")
+                        if (m != null && m.optBoolean("enabled", false)) {
+                            maintenanceMessage = m.optString("message", "التطبيق في وضع الصيانة حالياً.")
+                        }
+                        val a = json.optJSONObject("announcement")
+                        if (a != null && a.optBoolean("enabled", false)) {
+                            val msg = a.optString("message", "")
+                            if (msg.isNotBlank()) {
+                                announcementBanner = a.optString("title", "إشعار") to msg
+                            }
+                        }
+                    }
+                    conn.disconnect()
+                }
+            }
+        }
+    }
+
     CintraTheme(darkTheme = state.darkTheme, isArabic = state.isArabic) {
-        if (!state.hasCompletedOnboarding) {
+        if (maintenanceMessage != null) {
+            val pal = CintraThemePalette
+            Box(
+                modifier = Modifier.fillMaxSize().background(pal.canvas).padding(28.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 380.dp)
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(pal.surface)
+                        .border(0.9.dp, pal.borderSubtle, RoundedCornerShape(26.dp))
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.cintra_logo),
+                        contentDescription = "Cintra",
+                        modifier = Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)),
+                    )
+                    Text("التطبيق قيد الصيانة", color = pal.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = maintenanceMessage.orEmpty(),
+                        color = pal.textSecondary,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp,
+                    )
+                }
+            }
+        } else if (!state.hasCompletedOnboarding) {
             CintraOnboardingScreen(
                 isArabic = state.isArabic,
                 onContinue = viewModel::completeOnboarding,
             )
         } else {
-            CintraChatScreenContent(viewModel, state)
+            Box(modifier = Modifier.fillMaxSize()) {
+                CintraChatScreenContent(viewModel, state)
+                announcementBanner?.let { (aTitle, aMsg) ->
+                    val pal = CintraThemePalette
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 64.dp, start = 16.dp, end = 16.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(pal.surface.copy(alpha = 0.96f))
+                            .border(0.9.dp, pal.accent.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(aTitle, color = pal.accent, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                            Text(aMsg, color = pal.textPrimary, fontSize = 12.5.sp, lineHeight = 18.sp)
+                        }
+                        Icon(
+                            imageVector = CintraIcons.Close,
+                            contentDescription = "إغلاق",
+                            tint = pal.textSecondary,
+                            modifier = Modifier.size(18.dp).clickable { announcementBanner = null },
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -452,7 +552,7 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
     }
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty() && !showScrollDown) {
+        if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
     }
@@ -467,7 +567,8 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding(),
+                .statusBarsPadding()
+                .imePadding(),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,

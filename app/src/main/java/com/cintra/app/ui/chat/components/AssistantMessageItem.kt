@@ -1,7 +1,10 @@
 package com.cintra.app.ui.chat.components
 
 import android.graphics.Color as AndroidColor
+import android.view.View
+import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import org.json.JSONObject
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.style.TextAlign
@@ -264,9 +267,11 @@ private fun AssistantRow(
             if (lastSvg >= 0 && cleaned.indexOf("```", lastSvg + 13) < 0) {
                 cleaned = cleaned.substring(0, lastSvg)
             }
-            val lastWidget = cleaned.lastIndexOf("```cintra-widget")
-            if (lastWidget >= 0 && cleaned.indexOf("```", lastWidget + 16) < 0) {
-                cleaned = cleaned.substring(0, lastWidget)
+            for (blockTag in listOf("```cintra-widget", "```mermaid", "```cintra-chart", "```cintra-quiz")) {
+                val pos = cleaned.lastIndexOf(blockTag)
+                if (pos >= 0 && cleaned.indexOf("```", pos + blockTag.length) < 0) {
+                    cleaned = cleaned.substring(0, pos)
+                }
             }
             cleaned.trim()
         }
@@ -452,6 +457,9 @@ private sealed interface MdSegment {
     data class MathSegment(val expr: String) : MdSegment
     data class SvgSegment(val svg: String) : MdSegment
     data class WidgetSegment(val html: String) : MdSegment
+    data class MermaidSegment(val code: String) : MdSegment
+    data class ChartSegment(val configJson: String) : MdSegment
+    data class QuizSegment(val json: String) : MdSegment
 }
 
 
@@ -541,9 +549,16 @@ private fun splitMarkdown(md: String): List<MdSegment> {
                 }
             } else if (lowerLang == "cintra-widget") {
                 val widgetHtml = code.toString().trim()
-                if (widgetHtml.isNotBlank()) {
-                    segments.add(MdSegment.WidgetSegment(widgetHtml))
-                }
+                if (widgetHtml.isNotBlank()) segments.add(MdSegment.WidgetSegment(widgetHtml))
+            } else if (lowerLang == "mermaid") {
+                val mCode = code.toString().trim()
+                if (mCode.isNotBlank()) segments.add(MdSegment.MermaidSegment(mCode))
+            } else if (lowerLang == "cintra-chart") {
+                val cJson = code.toString().trim()
+                if (cJson.isNotBlank()) segments.add(MdSegment.ChartSegment(cJson))
+            } else if (lowerLang == "cintra-quiz") {
+                val qJson = code.toString().trim()
+                if (qJson.isNotBlank()) segments.add(MdSegment.QuizSegment(qJson))
             } else if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file" && lowerLang != "cintra-suggestions") {
                 segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
             }
@@ -652,6 +667,12 @@ private fun MarkdownBody(
                     CintraInlineSvgCard(segment.svg)
                 is MdSegment.WidgetSegment ->
                     CintraInteractiveWidgetCard(segment.html)
+                is MdSegment.MermaidSegment ->
+                    CintraMermaidCard(segment.code)
+                is MdSegment.ChartSegment ->
+                    CintraChartCard(segment.configJson)
+                is MdSegment.QuizSegment ->
+                    CintraInteractiveQuizCard(segment.json)
             }
         }
         if (streaming) StreamingCursor()
@@ -691,44 +712,268 @@ private fun CintraDisplayMathCard(expr: String, fontScale: Float) {
     }
 }
 
-@Composable
-private fun CintraInlineSvgCard(svgMarkup: String) {
-    val palette = CintraThemePalette
-    val htmlDoc = remember(svgMarkup, palette.isDark) {
-        val bgHex = if (palette.isDark) "#141821" else "#F8FAFC"
-        """
-        <!DOCTYPE html>
-        <html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-        <style>
-          html,body{margin:0;padding:8px;width:100%;height:100%;box-sizing:border-box;background:$bgHex;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:sans-serif;}
-          svg{max-width:100%;max-height:100%;width:auto;height:auto;}
-        </style></head><body>$svgMarkup</body></html>
-        """.trimIndent()
+private class CintraHeightBridge(private val onHeight: (Int) -> Unit) {
+    @JavascriptInterface
+    fun reportHeight(px: Int) {
+        if (px in 80..1200) onHeight(px)
     }
+}
+
+@Composable
+private fun CintraAutoHeightWebCard(
+    htmlDoc: String,
+    baseUrl: String = "https://cdn.tailwindcss.com",
+    minHeightDp: Int = 190,
+    maxHeightDp: Int = 620,
+) {
+    val palette = CintraThemePalette
+    var heightDp by remember(htmlDoc) { mutableStateOf(minHeightDp) }
+    val bgColor = if (palette.isDark) Color(0xFF11151E) else Color(0xFFF8FAFC)
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(205.dp)
+            .height(heightDp.dp)
             .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (palette.isDark) Color(0xFF141821) else Color(0xFFF8FAFC))
-            .border(0.8.dp, palette.borderSubtle, RoundedCornerShape(18.dp)),
+            .clip(RoundedCornerShape(20.dp))
+            .background(bgColor)
+            .border(0.85.dp, palette.borderSubtle, RoundedCornerShape(20.dp)),
     ) {
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
                     setBackgroundColor(AndroidColor.TRANSPARENT)
-                    settings.javaScriptEnabled = false
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
                     isVerticalScrollBarEnabled = false
                     isHorizontalScrollBarEnabled = false
-                    loadDataWithBaseURL(null, htmlDoc, "text/html", "UTF-8", null)
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    addJavascriptInterface(
+                        CintraHeightBridge { h ->
+                            val clamped = (h + 16).coerceIn(minHeightDp, maxHeightDp)
+                            post { heightDp = clamped }
+                        },
+                        "CintraBridge",
+                    )
+                    tag = htmlDoc
+                    loadDataWithBaseURL(baseUrl, htmlDoc, "text/html", "UTF-8", null)
                 }
             },
             update = { wv ->
-                wv.loadDataWithBaseURL(null, htmlDoc, "text/html", "UTF-8", null)
+                if (wv.tag != htmlDoc) {
+                    wv.tag = htmlDoc
+                    wv.loadDataWithBaseURL(baseUrl, htmlDoc, "text/html", "UTF-8", null)
+                }
             },
-            modifier = Modifier.fillMaxWidth().height(205.dp),
+            modifier = Modifier.fillMaxWidth().height(heightDp.dp),
         )
+    }
+}
+
+@Composable
+private fun CintraInteractiveWidgetCard(widgetMarkup: String) {
+    val palette = CintraThemePalette
+    val htmlDoc = remember(widgetMarkup, palette.isDark) {
+        val bg = if (palette.isDark) "#11151E" else "#F8FAFC"
+        val fg = if (palette.isDark) "#F1F5F9" else "#0F172A"
+        """
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="UTF-8"/>
+          <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"/>
+          <style>
+            html,body{margin:0;padding:12px;background:$bg;color:$fg;font-family:'Cairo',sans-serif;box-sizing:border-box;overflow:hidden;}
+            *{box-sizing:border-box;}
+          </style>
+        </head>
+        <body>
+          <div id="root">$widgetMarkup</div>
+          <script>
+            function syncH(){
+              try{
+                var h = Math.ceil(document.getElementById('root').scrollHeight + 28);
+                if(window.CintraBridge) window.CintraBridge.reportHeight(h);
+              }catch(e){}
+            }
+            window.addEventListener('load', function(){ syncH(); setTimeout(syncH, 350); setTimeout(syncH, 900); });
+            if(typeof ResizeObserver !== 'undefined'){ new ResizeObserver(syncH).observe(document.getElementById('root')); }
+          </script>
+        </body>
+        </html>
+        """.trimIndent()
+    }
+    CintraAutoHeightWebCard(htmlDoc = htmlDoc, minHeightDp = 240, maxHeightDp = 640)
+}
+
+@Composable
+private fun CintraInlineSvgCard(svgMarkup: String) {
+    val palette = CintraThemePalette
+    val htmlDoc = remember(svgMarkup, palette.isDark) {
+        val bg = if (palette.isDark) "#141821" else "#F8FAFC"
+        """
+        <!DOCTYPE html>
+        <html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+        <style>
+          html,body{margin:0;padding:10px;background:$bg;box-sizing:border-box;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:sans-serif;}
+          svg{width:100%;max-width:360px;height:185px;display:block;}
+        </style></head><body>$svgMarkup</body></html>
+        """.trimIndent()
+    }
+    CintraAutoHeightWebCard(htmlDoc = htmlDoc, baseUrl = "https://localhost/", minHeightDp = 210, maxHeightDp = 240)
+}
+
+@Composable
+private fun CintraMermaidCard(mermaidCode: String) {
+    val palette = CintraThemePalette
+    val htmlDoc = remember(mermaidCode, palette.isDark) {
+        val bg = if (palette.isDark) "#11151E" else "#F8FAFC"
+        val theme = if (palette.isDark) "dark" else "default"
+        val escaped = mermaidCode.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        """
+        <!DOCTYPE html>
+        <html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+        <style>
+          html,body{margin:0;padding:12px;background:$bg;overflow:hidden;display:flex;justify-content:center;}
+          .mermaid svg{max-width:100%;height:auto;}
+        </style></head><body>
+          <div id="root" class="mermaid">$escaped</div>
+          <script>
+            mermaid.initialize({ startOnLoad: true, theme: '$theme', securityLevel: 'loose' });
+            function syncH(){ try{ var h = Math.ceil(document.body.scrollHeight + 16); if(window.CintraBridge) window.CintraBridge.reportHeight(h); }catch(e){} }
+            window.addEventListener('load', function(){ setTimeout(syncH, 450); setTimeout(syncH, 1100); });
+          </script>
+        </body></html>
+        """.trimIndent()
+    }
+    CintraAutoHeightWebCard(htmlDoc = htmlDoc, baseUrl = "https://cdn.jsdelivr.net", minHeightDp = 220, maxHeightDp = 520)
+}
+
+@Composable
+private fun CintraChartCard(configJson: String) {
+    val palette = CintraThemePalette
+    val htmlDoc = remember(configJson, palette.isDark) {
+        val bg = if (palette.isDark) "#11151E" else "#F8FAFC"
+        val fg = if (palette.isDark) "#E2E8F0" else "#0F172A"
+        """
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+        <style>html,body{margin:0;padding:12px;background:$bg;color:$fg;overflow:hidden;}</style>
+        </head><body>
+          <canvas id="c" style="width:100%;height:220px;"></canvas>
+          <script>
+            try {
+              var cfg = $configJson;
+              cfg.options = cfg.options || {};
+              cfg.options.responsive = true;
+              new Chart(document.getElementById('c'), cfg);
+            } catch(e) { document.body.innerHTML = '<div style="padding:12px;font-size:13px;">تعذّر رسم المخطط</div>'; }
+          </script>
+        </body></html>
+        """.trimIndent()
+    }
+    CintraAutoHeightWebCard(htmlDoc = htmlDoc, baseUrl = "https://cdn.jsdelivr.net", minHeightDp = 250, maxHeightDp = 300)
+}
+
+@Composable
+private fun CintraInteractiveQuizCard(quizJson: String) {
+    val palette = CintraThemePalette
+    val parsed = remember(quizJson) {
+        runCatching {
+            val obj = JSONObject(quizJson)
+            val q = obj.optString("question", "")
+            val arr = obj.optJSONArray("options")
+            val opts = if (arr != null) (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() } else emptyList()
+            val ans = obj.optInt("answerIndex", 0)
+            val exp = obj.optString("explanation", "")
+            Triple(q, opts, Pair(ans, exp))
+        }.getOrNull()
+    } ?: return
+
+    val (question, options, ansPair) = parsed
+    val (correctIdx, explanation) = ansPair
+    if (question.isBlank() || options.isEmpty()) return
+
+    var selectedIdx by remember(quizJson) { mutableStateOf<Int?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(palette.surface)
+            .border(0.85.dp, palette.borderSubtle, RoundedCornerShape(20.dp))
+            .padding(15.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("سؤال تفاعلي سريع", color = palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = formatReadableMath(question),
+            color = palette.textPrimary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 23.sp,
+        )
+        options.forEachIndexed { idx, opt ->
+            val isSelected = selectedIdx == idx
+            val isCorrect = idx == correctIdx
+            val bg = when {
+                selectedIdx == null -> palette.surface2
+                isCorrect -> if (palette.isDark) Color(0x2E10B981) else Color(0xFFECFDF5)
+                isSelected -> if (palette.isDark) Color(0x2EEF4444) else Color(0xFFFEF2F2)
+                else -> palette.surface2.copy(alpha = 0.6f)
+            }
+            val borderCol = when {
+                selectedIdx == null -> palette.borderSubtle
+                isCorrect -> Color(0xFF10B981)
+                isSelected -> Color(0xFFEF4444)
+                else -> palette.borderSubtle
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(bg)
+                    .border(1.dp, borderCol, RoundedCornerShape(14.dp))
+                    .clickable(enabled = selectedIdx == null) { selectedIdx = idx }
+                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = formatReadableMath(opt),
+                    color = palette.textPrimary,
+                    fontSize = 13.5.sp,
+                    fontWeight = if (isSelected || (selectedIdx != null && isCorrect)) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier.weight(1f),
+                )
+                if (selectedIdx != null && (isCorrect || isSelected)) {
+                    Text(
+                        text = if (isCorrect) "✓" else "✗",
+                        color = if (isCorrect) Color(0xFF10B981) else Color(0xFFEF4444),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        if (selectedIdx != null && explanation.isNotBlank()) {
+            Text(
+                text = formatReadableMath(explanation),
+                color = palette.textSecondary,
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.surface2)
+                    .padding(10.dp),
+            )
+        }
     }
 }
 
@@ -1175,16 +1420,4 @@ private fun highlightKotlin(code: String): AnnotatedString = buildAnnotatedStrin
         last = match.range.last + 1
     }
     append(code, last, code.length)
-}
-@Composable
-private fun CintraInteractiveWidgetCard(widgetMarkup: String) {
-    val palette = CintraThemePalette
-    val htmlDoc = remember(widgetMarkup, palette.isDark) {
-        val bg = if (palette.isDark) "#11151E" else "#F8FAFC"
-        val fg = if (palette.isDark) "#F1F5F9" else "#0F172A"
-        "<!DOCTYPE html><html dir=\"rtl\" lang=\"ar\"><head><meta charset=\"UTF-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0,maximum-scale=1.0\"/><script src=\"https://cdn.tailwindcss.com\"></script><link href=\"https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap\" rel=\"stylesheet\"/><style>html,body{margin:0;padding:12px;background:" + bg + ";color:" + fg + ";font-family:Cairo,sans-serif;box-sizing:border-box;}*{box-sizing:border-box;}</style></head><body>" + widgetMarkup + "</body></html>"
-    }
-    Box(modifier = Modifier.fillMaxWidth().height(310.dp).padding(vertical = 4.dp).clip(RoundedCornerShape(20.dp)).background(if (palette.isDark) Color(0xFF11151E) else Color(0xFFF8FAFC)).border(0.85.dp, palette.borderSubtle, RoundedCornerShape(20.dp))) {
-        AndroidView(factory = { ctx -> WebView(ctx).apply { setBackgroundColor(AndroidColor.TRANSPARENT); settings.javaScriptEnabled = true; settings.domStorageEnabled = true; loadDataWithBaseURL("https://cdn.tailwindcss.com", htmlDoc, "text/html", "UTF-8", null) } }, update = { wv -> wv.loadDataWithBaseURL("https://cdn.tailwindcss.com", htmlDoc, "text/html", "UTF-8", null) }, modifier = Modifier.fillMaxWidth().height(310.dp))
-    }
 }

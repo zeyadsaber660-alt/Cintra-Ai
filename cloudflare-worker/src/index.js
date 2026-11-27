@@ -1,68 +1,79 @@
 /**
- * Cintra AI — Secure Cloudflare Worker Proxy & HyperOS Frosted Liquid Glass Control Center v3
+ * Cintra AI — Secure Cloudflare Worker Proxy & Multi-Page Frosted Liquid Glass Control Center v20
  *
  * Endpoints:
- *  - GET  / or /dashboard       -> Luxury Frosted Liquid Glass Admin Dashboard
- *  - GET  /api/admin/config     -> Load masked config (X-Admin-Secret)
- *  - POST /api/admin/config     -> Save provider keys & search key to Cloudflare KV
- *  - POST /api/admin/test       -> Live API key & model connectivity test with latency readout
- *  - POST /v1/chat/stream       -> Secure SSE streaming proxy for Cintra Android App (Bearer APP_TOKEN)
+ *  - GET  / or /dashboard       -> 5-Page Frosted Liquid Glass Admin Control Center (Persistent Login)
+ *  - GET  /v1/app/status        -> Remote Maintenance Mode, Broadcast Announcement & Feature Flags
+ *  - GET  /api/admin/config     -> Load full masked config + live stats (X-Admin-Secret)
+ *  - POST /api/admin/config     -> Save models, image API, search key, maintenance & broadcast to KV
+ *  - POST /api/admin/test       -> Live per-model API connectivity test with latency readout
+ *  - POST /v1/images/generate   -> Custom Image Generation API proxy (Bearer APP_TOKEN)
+ *  - POST /v1/chat/stream       -> Fast parallel-search SSE streaming proxy (Bearer APP_TOKEN)
  */
 
 const CONFIG_KEY = "cintra_models_config_v2";
+const STATS_KEY = "cintra_stats_v1";
 
 const SMART_UI_DIRECTIVE = [
   "You are Cintra, a warm, crystal-clear bilingual Arabic/English AI tutor and assistant.",
-  "- TOKEN EFFICIENCY RULE: Keep internal thinking under 40 words. NEVER write HTML, CSS, SVG, or full drafts inside thinking — put all code and answers directly in the final output.",
+  "- TOKEN EFFICIENCY: Keep internal thinking under 40 words. NEVER draft HTML, CSS, SVG, or full code inside thinking.",
   "- For simple greetings (اهلا، مرحبا، hello), reply warmly in 1-2 short sentences with zero thinking.",
-  "- Write clean natural Arabic (never mix random French/broken English words). NEVER write HTML entities like &mathbb;N — ALWAYS use real Unicode symbols (ℕ, ℤ, ℚ, ℝ, ℂ, ∅, ∪, ∩, ⊆).",
-  "- When files/PDFs are attached, ALWAYS pull real examples, numbers, and exercises directly from the attached files.",
-  "- INTERACTIVE WIDGETS: When the user asks for a calculator (savings, GPA, bill split, unit converter), interactive chart/simulation, or mini quiz/game, emit a self-contained Arabic RTL HTML+Tailwind+JS interactive widget inside ```cintra-widget\n...\n``` (only when `illustrativeImages` is enabled).",
-  "- For educational explanations: intuitive definition + centered math equations in $$...$$ using Unicode symbols (∪, ∩, ∈, ∉, ⊆, ∅, ℕ, ℤ, ℝ) + NEVER use <br> inside Markdown tables + optional compact ```cintra-svg``` diagram (Venn/flowchart) + > callout boxes for rules/answers + short practice question at the end.",
-  "- PDF GENERATION (RICH & COMPLETE): The app has 4 built-in Tailwind+Cairo RTL templates (study_guide, report, invoice, cheat_sheet). When creating a study/midterm/report PDF, NEVER make a tiny superficial summary — write a rich, comprehensive, exam-ready document with: clear explanations of EVERY topic, multiple step-by-step solved numerical examples (مثال محلول), structured tables, common exam traps (أخطاء شائعة), and practice questions. Always use HTML <sup> for exponents (e.g. 2<sup>n</sup>, f<sup>-1</sup>, x<sup>2</sup> — NEVER write ^). Use <span class=\"math\"> for inline math inside sentences and <div class=\"math-block\"> ONLY for standalone centered equations. Emit inside:",
+  "- Write clean natural Arabic (never mix random French/broken English words). NEVER write &mathbb;N — ALWAYS use real Unicode symbols (ℕ, ℤ, ℚ, ℝ, ℂ, ∅, ∪, ∩, ⊆).",
+  "- When PDFs/files are attached, ALWAYS pull real examples, numbers, and exercises directly from the attached files.",
+  "- VISUAL & INTERACTIVE TOOLS (use only when genuinely helpful):",
+  "  1. Flowcharts / Mindmaps / Sequence Diagrams -> emit valid Mermaid syntax inside ```mermaid\\n...\\n```.",
+  "  2. Statistical Charts (bar, line, pie, doughnut) -> emit Chart.js config JSON inside ```cintra-chart\\n{\"type\":\"bar\",\"data\":{\"labels\":[\"A\",\"B\"],\"datasets\":[{\"label\":\"القيمة\",\"data\":[80,95]}]}}\\n```.",
+  "  3. Interactive Practice Quiz (after study explanations) -> emit JSON inside ```cintra-quiz\\n{\"question\":\"سؤال تدريبي؟\",\"options\":[\"اختيار 1\",\"اختيار 2\",\"اختيار 3\",\"اختيار 4\"],\"answerIndex\":0,\"explanation\":\"سبب الإجابة الصحيحة\"}\\n```.",
+  "  4. Interactive Calculators / Sliders / Mini-Apps -> emit self-contained Arabic RTL HTML+Tailwind+JS inside ```cintra-widget\\n...\\n```.",
+  "  5. Venn Diagrams / Simple Geometry -> emit clean SVG with explicit viewBox inside ```cintra-svg\\n<svg viewBox=\"0 0 340 180\" ...>...</svg>\\n```.",
+  "- Put standalone math equations on their own centered line wrapped in $$...$$ using clean Unicode symbols.",
+  "- NEVER use <br> inside Markdown tables. Use > blockquotes for key rules/answers and ==word== for highlights.",
+  "- PDF GENERATION (RICH & COMPLETE): Built-in Tailwind+Cairo RTL templates (study_guide, report, invoice, cheat_sheet). Write a rich exam-ready document with explanations, step-by-step solved numerical examples, tables, exam traps, and practice questions. Always use HTML <sup> for exponents (2<sup>n</sup>, f<sup>-1</sup>), <span class=\"math\"> inline, and <div class=\"math-block\"> for standalone equations. Emit inside:",
   "```cintra-pdf",
   "TITLE: عنوان المستند",
   "FILENAME: summary.pdf",
   "TEMPLATE: study_guide",
   "SUMMARY: وصف مختصر",
   "---HTML---",
-  '<h2>1. العنوان</h2><p>الشرح المختصر والمنظم...</p><div class="box-green"><strong>قاعدة ذهبية:</strong> ...</div>',
+  '<h2>1. العنوان</h2><p>الشرح المفصل والأمثلة...</p><div class="box-green"><strong>قاعدة ذهبية:</strong> ...</div>',
   "```",
-  "- For image generation: ```genui-image\nDetailed English visual prompt\n```.",
-  "- In PDFs, NEVER put Arabic words inside .math blocks — keep Arabic outside .math so RTL/LTR never reverses.",
-  "- At the end of informative replies, optionally append 2-3 short Arabic follow-up suggestions inside ```cintra-suggestions\n[\"اقتراح 1\", \"اقتراح 2\"]\n```.",
-  "- For other downloadable files: ```cintra-file\nTITLE: ...\nFILENAME: ...\nMIME: ...\nSUMMARY: ...\n---CONTENT---\n...\n```."
+  "- For image generation: ```genui-image\\nDetailed English visual prompt\\n```.",
+  "- For other downloadable files (txt, json, csv, html, py): ```cintra-file\\nTITLE: ...\\nFILENAME: ...\\nMIME: ...\\nSUMMARY: ...\\n---CONTENT---\\n...\\n```.",
+  "- Optionally end informative replies with 2-3 short Arabic follow-up chips inside ```cintra-suggestions\\n[\"اقتراح 1\", \"اقتراح 2\"]\\n```."
 ].join("\n");
 
 const DEFAULT_CONFIG = {
   searchApiKey: "",
   imageApi: { baseUrl: "https://nexora-llm.onrender.com/v1", modelId: "auto", apiKey: "" },
+  maintenance: { enabled: false, message: "التطبيق قيد الصيانة السريعة حالياً لتحسين الأداء، سنعود خلال دقائق." },
+  announcement: { enabled: false, title: "تحديث جديد", message: "" },
+  features: { webSearch: true, visuals: true, pdfExport: true },
   models: {
     "cintra-pro": {
       label: "Cintra Pro",
-      baseUrl: "https://api.openai.com/v1",
-      modelId: "gpt-4o",
+      baseUrl: "https://nexora-llm.onrender.com/v1",
+      modelId: "auto:fast",
       apiKey: "",
       systemPrompt: "You are Cintra Pro — precise, thorough, and skilled in coding and analysis."
     },
     "cintra-think": {
       label: "Cintra Think",
-      baseUrl: "https://api.deepseek.com/v1",
-      modelId: "deepseek-reasoner",
+      baseUrl: "https://nexora-llm.onrender.com/v1",
+      modelId: "auto",
       apiKey: "",
       systemPrompt: "You are Cintra Think — reason carefully step-by-step before answering."
     },
     "cintra-core": {
       label: "Cintra Core",
-      baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-      modelId: "qwen-plus",
+      baseUrl: "https://nexora-llm.onrender.com/v1",
+      modelId: "auto:fast",
       apiKey: "",
       systemPrompt: "You are Cintra Core — fast, crisp, and clear for everyday tasks."
     },
     "cintra-vision": {
       label: "Cintra Vision",
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-      modelId: "gemini-2.5-pro",
+      baseUrl: "https://nexora-llm.onrender.com/v1",
+      modelId: "auto",
       apiKey: "",
       systemPrompt: "You are Cintra Vision — expert in visual understanding, images, and documents."
     }
@@ -86,19 +97,43 @@ function jsonResponse(data, status = 200) {
 }
 
 async function loadConfig(env) {
-  if (!env.CINTRA_CONFIG) return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  if (!env.CINTRA_CONFIG) return base;
   const raw = await env.CINTRA_CONFIG.get(CONFIG_KEY);
-  if (!raw) return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  if (!raw) return base;
   try {
     const parsed = JSON.parse(raw);
     return {
       searchApiKey: parsed.searchApiKey || "",
-      imageApi: { ...DEFAULT_CONFIG.imageApi, ...(parsed.imageApi || {}) },
-      models: { ...JSON.parse(JSON.stringify(DEFAULT_CONFIG.models)), ...(parsed.models || {}) }
+      imageApi: { ...base.imageApi, ...(parsed.imageApi || {}) },
+      maintenance: { ...base.maintenance, ...(parsed.maintenance || {}) },
+      announcement: { ...base.announcement, ...(parsed.announcement || {}) },
+      features: { ...base.features, ...(parsed.features || {}) },
+      models: { ...base.models, ...(parsed.models || {}) }
     };
   } catch (_e) {
-    return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+    return base;
   }
+}
+
+async function loadStats(env) {
+  if (!env.CINTRA_CONFIG) return { totalRequests: 0, lastRequestAt: "" };
+  try {
+    const raw = await env.CINTRA_CONFIG.get(STATS_KEY);
+    return raw ? JSON.parse(raw) : { totalRequests: 0, lastRequestAt: "" };
+  } catch (_e) {
+    return { totalRequests: 0, lastRequestAt: "" };
+  }
+}
+
+async function bumpStats(env) {
+  if (!env.CINTRA_CONFIG) return;
+  try {
+    const s = await loadStats(env);
+    s.totalRequests = (s.totalRequests || 0) + 1;
+    s.lastRequestAt = new Date().toISOString();
+    await env.CINTRA_CONFIG.put(STATS_KEY, JSON.stringify(s));
+  } catch (_e) {}
 }
 
 function maskKey(key) {
@@ -120,7 +155,7 @@ function verifyAppToken(request, env) {
 function needsAutoWebSearch(prompt, tool, autoEnabled) {
   if (tool === "web") return true;
   if (!autoEnabled || !prompt) return false;
-  return /(دور|دورلي|ابحث|بحث|صح ولا لا|حقيقة|تأكد|تأكيد|مصدر|مصادر|معلومة|وشاح|جامعة|كلية|فرقة|الفرقة|طرق السفر|سفر|السفر|فيزا|تأشيرة|هجرة|سعر|اسعار|أسعار|اليوم|أحدث|أخبار|طقس|2025|2026|2027|search|verify|fact check|sources|travel|visa|latest|news|price|weather|today|current)/i.test(prompt);
+  return /(دور|دورلي|ابحث|بحث|صح ولا لا|حقيقة|تأكد|تأكيد|مصدر|مصادر|وشاح|طرق السفر|سفر|السفر|فيزا|تأشيرة|هجرة|سعر|اسعار|أسعار|اليوم|أحدث|أخبار|طقس|2025|2026|2027|search|verify|fact check|travel|visa|latest|news|price|weather|today|current)/i.test(prompt);
 }
 
 async function runAutoWebSearch(query, tavilyApiKey) {
@@ -130,51 +165,47 @@ async function runAutoWebSearch(query, tavilyApiKey) {
       const resp = await fetch("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 5, include_answer: true, search_depth: "basic" })
+        body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 4, include_answer: true, search_depth: "basic" })
       });
       if (resp.ok) {
         const data = await resp.json();
         const snippets = (data.results || []).map((r, i) => {
           if (r.url) sources.push({ title: r.title || r.url, url: r.url });
-          return `[${i + 1}] ${r.title} (${r.url}): ${r.content}`;
+          return "[" + (i + 1) + "] " + r.title + " (" + r.url + "): " + r.content;
         }).join("\n");
         return { text: snippets || data.answer || "", sources };
       }
     }
-    const ddg = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`);
+    const ddg = await fetch("https://api.duckduckgo.com/?q=" + encodeURIComponent(query) + "&format=json&no_html=1");
     if (ddg.ok) {
       const d = await ddg.json();
       if (d.AbstractURL) sources.push({ title: d.Heading || "Source", url: d.AbstractURL });
-      if (d.AbstractText) return { text: `${d.Heading || ""}: ${d.AbstractText} (${d.AbstractURL || ""})`, sources };
+      if (d.AbstractText) return { text: (d.Heading || "") + ": " + d.AbstractText + " (" + (d.AbstractURL || "") + ")", sources };
     }
   } catch (_e) {}
   return { text: "", sources };
 }
-
-
 
 async function fetchUrlContext(prompt) {
   const m = (prompt || "").match(/https?:\/\/[^\s<>")]+/i);
   if (!m) return "";
   const targetUrl = m[0];
   try {
-    // YouTube video understanding: title, channel, description, and auto-captions if available
     if (/(youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts)/i.test(targetUrl)) {
       const [oembedResp, pageResp] = await Promise.all([
-        fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(targetUrl)}&format=json`).catch(() => null),
+        fetch("https://www.youtube.com/oembed?url=" + encodeURIComponent(targetUrl) + "&format=json").catch(() => null),
         fetch(targetUrl, { headers: { "User-Agent": "Mozilla/5.0", "Accept-Language": "ar,en;q=0.9" } }).catch(() => null)
       ]);
       let info = "";
       if (oembedResp && oembedResp.ok) {
         const oe = await oembedResp.json();
-        info += `YouTube Video: ${oe.title || ""} | Channel: ${oe.author_name || ""}\n`;
+        info += "YouTube Video: " + (oe.title || "") + " | Channel: " + (oe.author_name || "") + "\n";
       }
       if (pageResp && pageResp.ok) {
         const html = await pageResp.text();
         const descMatch = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
         if (descMatch) {
-          const desc = descMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').slice(0, 2500);
-          info += `Description:\n${desc}\n`;
+          info += "Description:\n" + descMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').slice(0, 2500) + "\n";
         }
         const capMatch = html.match(/"captionTracks":\[\{"baseUrl":"([^"]+)"/);
         if (capMatch) {
@@ -183,24 +214,17 @@ async function fetchUrlContext(prompt) {
           if (capResp && capResp.ok) {
             const xml = await capResp.text();
             const transcript = xml.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 5000);
-            if (transcript) info += `Transcript:\n${transcript}\n`;
+            if (transcript) info += "Transcript:\n" + transcript + "\n";
           }
         }
       }
       return info.trim();
     }
-
-    const r = await fetch(targetUrl, { headers: { "User-Agent": "CintraAI/19.0" } });
+    const r = await fetch(targetUrl, { headers: { "User-Agent": "CintraAI/20.0" } });
     if (!r.ok) return "";
     const html = await r.text();
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s{2,}/g, " ")
-      .trim()
-      .slice(0, 6000);
-    return text ? `URL Content (${targetUrl}):\n${text}` : "";
+    const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 6000);
+    return text ? "URL Content (" + targetUrl + "):\n" + text : "";
   } catch (_e) {
     return "";
   }
@@ -209,7 +233,7 @@ async function fetchUrlContext(prompt) {
 function needsRealWebPhotos(prompt) {
   if (!prompt || prompt.trim().length < 6) return false;
   if (/^(اهلا|أهلا|أهلاً|مرحبا|مرحباً|هاي|هلو|السلام|ازيك|إزيك|اي ده|إيه ده|hello|hi|hey)\b/i.test(prompt.trim())) return false;
-  return /(سفر|السفر|سياحة|السياحة|معالم|أماكن|اماكن|مدينة|مدن|صور|صورة|ألمانيا|المانيا|تركيا|أمريكا|امريكا|نيويورك|باريس|لندن|دبي|مصر|القاهرة|اليابان|إيطاليا|ايطاليا|جبل|شاطئ|travel|visit|city|landmarks|places|photos|germany|turkey|usa|paris|dubai)/i.test(prompt);
+  return /(سفر|السفر|سياحة|السياحة|معالم|أماكن|اماكن|مدينة|مدن|صور|صورة|ألمانيا|المانيا|تركيا|أمريكا|امريكا|نيويورك|باريس|لندن|دبي|مصر|القاهرة|اليابان|إيطاليا|ايطاليا|جبل|شاطئ|travel|visit|city|landmarks|places|photos)/i.test(prompt);
 }
 
 async function fetchRealWebPhotos(query, tavilyApiKey) {
@@ -225,24 +249,11 @@ async function fetchRealWebPhotos(query, tavilyApiKey) {
       if (r.ok) {
         const d = await r.json();
         for (const img of (d.images || []).slice(0, 5)) {
-          const url = typeof img === "string" ? img : img.url;
+          const u = typeof img === "string" ? img : img.url;
           const title = typeof img === "string" ? "" : (img.description || "");
-          if (url && url.startsWith("https://")) photos.push({ url, title, source: "web" });
+          if (u && u.startsWith("https://")) photos.push({ url: u, title, source: "web" });
         }
         if (photos.length > 0) return photos;
-      }
-    }
-    // Free Wikimedia Commons real-photo search (works in Arabic & English, zero API key needed)
-    const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=6&prop=pageimages&piprop=thumbnail&pithumbsize=640&format=json&origin=*`;
-    const wr = await fetch(wikiUrl, { headers: { "User-Agent": "CintraAI/4.0" } });
-    if (wr.ok) {
-      const wd = await wr.json();
-      const pages = Object.values(wd?.query?.pages || {});
-      for (const p of pages) {
-        if (p?.thumbnail?.source && p.thumbnail.source.startsWith("https://")) {
-          photos.push({ url: p.thumbnail.source, title: p.title || "", source: "wikipedia" });
-        }
-        if (photos.length >= 4) break;
       }
     }
   } catch (_e) {}
@@ -250,7 +261,7 @@ async function fetchRealWebPhotos(query, tavilyApiKey) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
@@ -263,9 +274,19 @@ export default {
       });
     }
 
+    // Remote App Status (Maintenance Mode, Broadcast Banner, Feature Flags)
+    if (request.method === "GET" && url.pathname === "/v1/app/status") {
+      const cfg = await loadConfig(env);
+      return jsonResponse({
+        maintenance: cfg.maintenance,
+        announcement: cfg.announcement,
+        features: cfg.features
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/api/admin/config") {
       if (!verifyAdmin(request, env)) return jsonResponse({ error: "كلمة مرور الإدارة غير صحيحة" }, 401);
-      const cfg = await loadConfig(env);
+      const [cfg, stats] = await Promise.all([loadConfig(env), loadStats(env)]);
       const maskedModels = {};
       for (const [k, v] of Object.entries(cfg.models)) {
         maskedModels[k] = { ...v, apiKey: "", apiKeyMasked: maskKey(v.apiKey), hasKey: Boolean(v.apiKey) };
@@ -274,7 +295,16 @@ export default {
         models: maskedModels,
         hasSearchKey: Boolean(cfg.searchApiKey),
         searchKeyMasked: maskKey(cfg.searchApiKey),
-        imageApi: { baseUrl: cfg.imageApi?.baseUrl || "", modelId: cfg.imageApi?.modelId || "", hasKey: Boolean(cfg.imageApi?.apiKey), apiKeyMasked: maskKey(cfg.imageApi?.apiKey) },
+        imageApi: {
+          baseUrl: cfg.imageApi?.baseUrl || "",
+          modelId: cfg.imageApi?.modelId || "",
+          hasKey: Boolean(cfg.imageApi?.apiKey),
+          apiKeyMasked: maskKey(cfg.imageApi?.apiKey)
+        },
+        maintenance: cfg.maintenance,
+        announcement: cfg.announcement,
+        features: cfg.features,
+        stats,
         kvBound: Boolean(env.CINTRA_CONFIG)
       });
     }
@@ -289,10 +319,15 @@ export default {
           ? incoming.searchApiKey.trim()
           : existing.searchApiKey,
         imageApi: {
-          baseUrl: (incoming.imageApi?.baseUrl || existing.imageApi?.baseUrl || "").trim().replace(/\/+$/, ""),
-          modelId: (incoming.imageApi?.modelId || existing.imageApi?.modelId || "auto").trim(),
-          apiKey: incoming.imageApi?.apiKey && incoming.imageApi.apiKey.trim() !== "" ? incoming.imageApi.apiKey.trim() : (existing.imageApi?.apiKey || "")
+          baseUrl: (incoming.imageApi?.baseUrl ?? existing.imageApi?.baseUrl ?? "").trim().replace(/\/+$/, ""),
+          modelId: (incoming.imageApi?.modelId ?? existing.imageApi?.modelId ?? "auto").trim(),
+          apiKey: incoming.imageApi?.apiKey && incoming.imageApi.apiKey.trim() !== ""
+            ? incoming.imageApi.apiKey.trim()
+            : (existing.imageApi?.apiKey || "")
         },
+        maintenance: incoming.maintenance ? { ...existing.maintenance, ...incoming.maintenance } : existing.maintenance,
+        announcement: incoming.announcement ? { ...existing.announcement, ...incoming.announcement } : existing.announcement,
+        features: incoming.features ? { ...existing.features, ...incoming.features } : existing.features,
         models: { ...existing.models }
       };
 
@@ -313,7 +348,6 @@ export default {
       return jsonResponse({ ok: true });
     }
 
-    // Live Model Connectivity Test
     if (request.method === "POST" && url.pathname === "/api/admin/test") {
       if (!verifyAdmin(request, env)) return jsonResponse({ error: "كلمة مرور الإدارة غير صحيحة" }, 401);
       const { modelKey } = await request.json();
@@ -324,12 +358,9 @@ export default {
       }
       const start = Date.now();
       try {
-        const resp = await fetch(`${route.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+        const resp = await fetch(route.baseUrl.replace(/\/+$/, "") + "/chat/completions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${route.apiKey}`
-          },
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + route.apiKey },
           body: JSON.stringify({
             model: route.modelId,
             messages: [{ role: "user", content: "Reply with OK only." }],
@@ -348,8 +379,6 @@ export default {
       }
     }
 
-
-    // Custom Image Generation API proxy (uses user's configured Image API from Dashboard)
     if (request.method === "POST" && url.pathname === "/v1/images/generate") {
       if (!verifyAppToken(request, env)) return jsonResponse({ error: "Unauthorized" }, 401);
       const { prompt } = await request.json();
@@ -357,37 +386,37 @@ export default {
       const imgCfg = cfg.imageApi || {};
       const key = imgCfg.apiKey || cfg.models["cintra-pro"]?.apiKey || "";
       const base = (imgCfg.baseUrl || cfg.models["cintra-pro"]?.baseUrl || "").replace(/\/+$/, "");
-      if (!base || !key) {
-        return jsonResponse({ error: "Image API not configured" }, 400);
-      }
+      if (!base || !key) return jsonResponse({ error: "Image API not configured" }, 400);
       try {
-        const resp = await fetch(`${base}/images/generations`, {
+        const resp = await fetch(base + "/images/generations", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
           body: JSON.stringify({ model: imgCfg.modelId || "auto", prompt, n: 1, size: "1024x1024" })
         });
         const data = await resp.json();
         const first = data?.data?.[0] || {};
-        if (first.url || first.b64_json) {
-          return jsonResponse({ url: first.url || "", b64_json: first.b64_json || "" });
-        }
-        return jsonResponse({ error: data?.error?.message || "Image API returned empty data" }, 502);
+        if (first.url || first.b64_json) return jsonResponse({ url: first.url || "", b64_json: first.b64_json || "" });
+        return jsonResponse({ error: data?.error?.message || "Empty image response" }, 502);
       } catch (e) {
         return jsonResponse({ error: e.message || "Image generation failed" }, 502);
       }
     }
 
-    // Secure SSE Streaming Proxy for Android App
     if (request.method === "POST" && url.pathname === "/v1/chat/stream") {
       if (!verifyAppToken(request, env)) return jsonResponse({ error: "Unauthorized" }, 401);
 
+      const cfg = await loadConfig(env);
+      if (cfg.maintenance?.enabled) {
+        return jsonResponse({ error: cfg.maintenance.message || "التطبيق في وضع الصيانة حالياً." }, 503);
+      }
+      if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(bumpStats(env));
+
       const body = await request.json();
       const modelKey = body.model || "cintra-pro";
-      const cfg = await loadConfig(env);
       const route = cfg.models[modelKey] || cfg.models["cintra-pro"];
 
       if (!route || !route.apiKey) {
-        return jsonResponse({ error: `لم يتم ضبط مفتاح API للنموذج ${modelKey} في لوحة التحكم` }, 400);
+        return jsonResponse({ error: "لم يتم ضبط مفتاح API للنموذج " + modelKey + " في لوحة التحكم" }, 400);
       }
 
       const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
@@ -399,11 +428,11 @@ export default {
       const withTimeout = (promise, ms, fallback) =>
         Promise.race([promise, new Promise((res) => setTimeout(() => res(fallback), ms))]);
 
-      const shouldSearch = needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false);
+      const shouldSearch = cfg.features?.webSearch !== false && needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false);
       const [urlContext, searchRes, prefetchedPhotos] = await Promise.all([
         withTimeout(fetchUrlContext(lastUserPrompt), 2800, ""),
         shouldSearch ? withTimeout(runAutoWebSearch(lastUserPrompt, cfg.searchApiKey), 2800, { text: "", sources: [] }) : Promise.resolve({ text: "", sources: [] }),
-        body.illustrativeImages !== false ? withTimeout(fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey), 2200, []) : Promise.resolve([])
+        cfg.features?.visuals !== false && body.illustrativeImages !== false ? withTimeout(fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey), 2200, []) : Promise.resolve([])
       ]);
 
       let webContext = "";
@@ -413,16 +442,16 @@ export default {
 
       const fullSystem = [
         route.systemPrompt || "",
-        body.customInstructions ? `\nUser Custom Instructions:\n${body.customInstructions}` : "",
+        body.customInstructions ? "\nUser Custom Instructions:\n" + body.customInstructions : "",
         body.generativeUi !== false ? SMART_UI_DIRECTIVE : "",
-        webContext ? `\nLive Web Search Context:\n${webContext}` : ""
+        webContext ? "\nLive Web & Video Context:\n" + webContext : ""
       ].filter(Boolean).join("\n");
 
-      const upstreamResp = await fetch(`${route.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+      const upstreamResp = await fetch(route.baseUrl.replace(/\/+$/, "") + "/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${route.apiKey}`
+          "Authorization": "Bearer " + route.apiKey
         },
         body: JSON.stringify({
           model: route.modelId,
@@ -434,23 +463,22 @@ export default {
 
       if (!upstreamResp.ok) {
         const errText = await upstreamResp.text();
-        return jsonResponse({ error: `خطأ من المزود (${upstreamResp.status}): ${errText.slice(0, 220)}` }, upstreamResp.status);
+        return jsonResponse({ error: "خطأ من المزود (" + upstreamResp.status + "): " + errText.slice(0, 220) }, upstreamResp.status);
       }
 
       const webPhotos = prefetchedPhotos || [];
-
       if (upstreamResp.body) {
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           async start(controller) {
             if (webContext) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_status: "تم البحث في الويب والتحقق من المصادر..." })}\n\n`));
+              controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_status: "تم البحث والتحقق • جارٍ كتابة الإجابة..." }) + "\n\n"));
             }
             if (webSources.length > 0) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_sources: webSources })}\n\n`));
+              controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_sources: webSources }) + "\n\n"));
             }
             if (webPhotos.length > 0) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ cintra_photos: webPhotos })}\n\n`));
+              controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_photos: webPhotos }) + "\n\n"));
             }
             const reader = upstreamResp.body.getReader();
             try {
@@ -494,275 +522,321 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cintra Control Center</title>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    :root { --spring: cubic-bezier(0.22, 1, 0.36, 1); --jelly: cubic-bezier(0.34, 1.45, 0.64, 1); }
-    [data-theme="dark"] {
-      --bg: #08090C;
-      --mesh: radial-gradient(650px circle at 85% 8%, rgba(56,189,248,0.12), transparent 58%), radial-gradient(550px circle at 10% 90%, rgba(148,163,184,0.10), transparent 60%);
-      --glass: rgba(20, 23, 31, 0.78);
-      --card: rgba(25, 29, 38, 0.82);
-      --input: #11141C;
-      --text: #F5F7FA;
-      --muted: #98A1B2;
-      --border: rgba(255,255,255,0.10);
-      --rim: rgba(255,255,255,0.28);
-      --accent: #38BDF8;
-      --accent-soft: rgba(56,189,248,0.14);
-      --ok: #34D399;
-      --ok-soft: rgba(52,211,153,0.15);
-      --err: #FB7185;
-      --err-soft: rgba(251,113,133,0.15);
-      --solid: #F5F7FA;
-      --solid-t: #08090C;
-    }
-    [data-theme="light"] {
-      --bg: #EFF1F5;
-      --mesh: radial-gradient(650px circle at 85% 8%, rgba(2,132,199,0.10), transparent 58%), radial-gradient(550px circle at 10% 90%, rgba(100,116,139,0.12), transparent 60%);
-      --glass: rgba(255, 255, 255, 0.82);
-      --card: rgba(255, 255, 255, 0.90);
-      --input: #F4F6F9;
-      --text: #0F131A;
-      --muted: #556072;
-      --border: rgba(15,19,26,0.09);
-      --rim: rgba(255,255,255,0.98);
-      --accent: #0284C7;
-      --accent-soft: rgba(2,132,199,0.12);
-      --ok: #059669;
-      --ok-soft: rgba(5,150,105,0.12);
-      --err: #E11D48;
-      --err-soft: rgba(225,29,72,0.12);
-      --solid: #0F131A;
-      --solid-t: #FFFFFF;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
-      background: var(--bg); background-image: var(--mesh); background-attachment: fixed;
-      color: var(--text); min-height: 100vh; padding: 20px 16px 60px;
-    }
-    .container { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
-    .glass {
-      background: var(--glass); backdrop-filter: blur(30px) saturate(175%); -webkit-backdrop-filter: blur(30px) saturate(175%);
-      border: 1px solid var(--border); border-top-color: var(--rim);
-      border-radius: 26px; padding: 20px; box-shadow: 0 18px 42px rgba(0,0,0,0.22);
-    }
-    .topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .brand-icon {
-      width: 44px; height: 44px; border-radius: 14px; background: var(--solid); color: var(--solid-t);
-      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px;
-    }
-    .capsule {
-      display: inline-flex; align-items: center; gap: 4px; padding: 4px; border-radius: 999px;
-      background: var(--input); border: 1px solid var(--border);
-    }
-    .btn {
-      border: none; border-radius: 999px; padding: 9px 18px; font-family: inherit; font-weight: 600;
-      font-size: 13px; cursor: pointer; transition: transform 0.22s var(--jelly), opacity 0.2s ease;
-    }
-    .btn:active { transform: scale(0.95); }
-    .btn-primary { background: var(--solid); color: var(--solid-t); }
-    .btn-ghost { background: transparent; color: var(--text); }
-    .btn-soft { background: var(--accent-soft); color: var(--accent); padding: 7px 14px; font-size: 12px; }
-    .auth-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
-    @media (max-width: 720px) { .auth-grid { grid-template-columns: 1fr; } }
-    .models-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 16px; }
-    @media (max-width: 480px) { .models-grid { grid-template-columns: 1fr; } }
-    .model-card {
-      background: var(--card); border: 1px solid var(--border); border-top-color: var(--rim);
-      border-radius: 24px; padding: 18px; display: flex; flex-direction: column; gap: 12px;
-      transition: transform 0.25s var(--spring);
-    }
-    .model-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-    .badge { font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
-    .badge-ok { background: var(--ok-soft); color: var(--ok); }
-    .badge-warn { background: var(--err-soft); color: var(--err); }
-    .field { display: flex; flex-direction: column; gap: 5px; }
-    label { font-size: 12px; font-weight: 600; color: var(--muted); }
-    input, select {
-      width: 100%; border: 1px solid var(--border); background: var(--input); color: var(--text);
-      border-radius: 14px; padding: 10px 13px; font-family: inherit; font-size: 13px; outline: none;
-    }
-    input[dir="ltr"] { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
-    input:focus, select:focus { border-color: var(--accent); }
-    .preset-row { display: flex; gap: 6px; flex-wrap: wrap; }
-    .preset-chip {
-      border: 1px solid var(--border); background: var(--input); color: var(--muted);
-      border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
-    }
-    .preset-chip:hover { color: var(--text); border-color: var(--accent); }
-    .test-result { font-size: 12px; font-weight: 600; min-height: 18px; }
-    .toast-bar {
-      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
-      padding: 10px 22px; border-radius: 999px; background: var(--solid); color: var(--solid-t);
-      font-size: 13px; font-weight: 600; opacity: 0; pointer-events: none; transition: all 0.28s var(--jelly);
-      z-index: 50; box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-    }
-    .toast-bar.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    :root { --bg:#0B0E14; --surface:rgba(20,25,36,0.82); --surface2:rgba(30,37,52,0.72); --text:#F1F5F9; --muted:#94A3B8; --border:rgba(255,255,255,0.10); --accent:#38BDF8; --ok:#34D399; --err:#FB7185; --warn:#FBBF24; }
+    [data-theme="light"] { --bg:#F4F7FB; --surface:rgba(255,255,255,0.88); --surface2:#EEF2F7; --text:#0F172A; --muted:#64748B; --border:rgba(15,23,42,0.10); --accent:#0284C7; --ok:#059669; --err:#E11D48; --warn:#D97706; }
+    *{box-sizing:border-box;font-family:'Cairo',sans-serif;}
+    body{margin:0;background:var(--bg);color:var(--text);min-height:100vh;}
+    .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+    .login-card{width:100%;max-width:400px;background:var(--surface);backdrop-filter:blur(24px);border:1px solid var(--border);border-radius:26px;padding:28px;box-shadow:0 24px 60px rgba(0,0,0,0.35);}
+    .app{display:none;min-height:100vh;}
+    .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--surface);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
+    .tabs{display:flex;gap:8px;overflow-x:auto;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);}
+    .tab{padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;}
+    .tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+    .container{max-width:980px;margin:0 auto;padding:20px;}
+    .page{display:none;}
+    .page.active{display:block;}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:18px;margin-bottom:16px;}
+    .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px;}
+    .stat{background:var(--surface2);border:1px solid var(--border);border-radius:18px;padding:16px;}
+    .stat-v{font-size:24px;font-weight:800;margin-top:4px;color:var(--accent);}
+    .field{margin-top:10px;}
+    .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600;}
+    input,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13.5px;outline:none;}
+    .btn{padding:10px 18px;border-radius:12px;border:none;font-weight:700;font-size:13px;cursor:pointer;}
+    .btn-primary{background:var(--accent);color:#fff;}
+    .btn-soft{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+    .btn-danger{background:rgba(251,113,133,0.16);color:var(--err);border:1px solid rgba(251,113,133,0.3);}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+    .chip{padding:5px 10px;border-radius:999px;font-size:11.5px;font-weight:700;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;}
+    .badge-ok{color:var(--ok);font-size:12px;font-weight:700;}
+    .badge-warn{color:var(--warn);font-size:12px;font-weight:700;}
+    .switch-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);}
+    .switch-row:last-child{border-bottom:none;}
+    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0F172A;color:#fff;padding:10px 20px;border-radius:999px;font-size:13px;font-weight:700;display:none;z-index:99;box-shadow:0 12px 30px rgba(0,0,0,0.4);}
   </style>
 </head>
 <body>
-  <div class="container">
-    <header class="glass topbar">
-      <div class="brand">
-        <div class="brand-icon">C</div>
-        <div>
-          <h1 style="font-size:19px;">Cintra Control Center</h1>
-          <p style="font-size:12.5px;color:var(--muted);">إدارة مفاتيح النماذج واختبار الاتصال الحي بأمان على Cloudflare KV</p>
-        </div>
+  <div class="login-wrap" id="loginView">
+    <div class="login-card">
+      <h2 style="margin:0 0 6px;">Cintra Control Center</h2>
+      <p style="margin:0 0 18px;color:var(--muted);font-size:13px;">سجّل الدخول مرة واحدة فقط وسيتم حفظ جلستك تلقائياً</p>
+      <div class="field">
+        <label>كلمة مرور الإدارة (ADMIN_SECRET)</label>
+        <input id="loginSecret" type="password" placeholder="أدخل ADMIN_SECRET..." dir="ltr" />
       </div>
-      <div class="capsule">
-        <button class="btn btn-ghost" id="themeBtn" type="button">تبديل المظهر</button>
-        <button class="btn btn-primary" id="saveBtn" type="button">حفظ جميع الإعدادات</button>
-      </div>
-    </header>
-
-    <section class="glass">
-      <div class="auth-grid">
-        <div class="field">
-          <label for="adminSecret">كلمة مرور الإدارة (ADMIN_SECRET)</label>
-          <input id="adminSecret" type="password" placeholder="أدخل ADMIN_SECRET لفتح الإعدادات" />
-        </div>
-        <div class="field">
-          <label for="searchKey">مفتاح البحث التلقائي في الويب (Tavily — اختياري)</label>
-          <input id="searchKey" type="password" dir="ltr" placeholder="tvly-... (اتركه فارغاً لاستخدام Fallback)" />
-        </div>
-        <button class="btn btn-primary" id="loadBtn" type="button" style="height:42px;">فتح وتحميل</button>
-      </div>
-    </section>
-
-    <section class="models-grid" id="modelsGrid"></section>
+      <button class="btn btn-primary" style="width:100%;margin-top:16px;" id="loginBtn">دخول للوحة التحكم</button>
+    </div>
   </div>
 
-  <div class="toast-bar" id="toastBar"></div>
+  <div class="app" id="appView">
+    <div class="topbar">
+      <div class="row">
+        <strong style="font-size:17px;">Cintra Control Center</strong>
+        <span id="kvStatus" class="badge-ok"></span>
+      </div>
+      <div class="row">
+        <button class="btn btn-primary" id="saveAllBtn">حفظ جميع التغييرات</button>
+        <button class="btn btn-soft" id="themeBtn">المظهر</button>
+        <button class="btn btn-danger" id="logoutBtn">تسجيل خروج</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="models">1. النماذج والـ API</button>
+      <button class="tab" data-tab="media">2. محرك الصور والبحث</button>
+      <button class="tab" data-tab="control">3. الصيانة والتحكم</button>
+      <button class="tab" data-tab="broadcast">4. الإشعارات العامة</button>
+      <button class="tab" data-tab="stats">5. الإحصائيات والحالة</button>
+    </div>
+
+    <div class="container">
+      <div class="page active" id="page-models">
+        <div class="grid2" id="modelsGrid"></div>
+      </div>
+
+      <div class="page" id="page-media">
+        <div class="card">
+          <h3 style="margin:0 0 8px;">محرك توليد الصور الخاص بك (Image API)</h3>
+          <p style="margin:0 0 12px;color:var(--muted);font-size:12.5px;">يربط ميزة توليد الصور داخل التطبيق مباشرة بـ API منصتك (/images/generations).</p>
+          <div class="field"><label>Image Base URL</label><input id="imgBaseUrl" dir="ltr" placeholder="https://nexora-llm.onrender.com/v1" /></div>
+          <div class="field"><label>Image Model ID</label><input id="imgModelId" dir="ltr" placeholder="auto" /></div>
+          <div class="field"><label>Image API Key (اتركه فارغاً لاستخدام مفتاح Cintra Pro)</label><input id="imgApiKey" type="password" dir="ltr" placeholder="sk-..." /></div>
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 8px;">محرك البحث المباشر (Tavily Search API)</h3>
+          <div class="field"><label>Tavily API Key (اتركه فارغاً للإبقاء على المفتاح المحفوظ)</label><input id="searchApiKey" type="password" dir="ltr" placeholder="tvly-..." /></div>
+          <div id="searchMasked" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-control">
+        <div class="card">
+          <h3 style="margin:0 0 10px;">وضع الصيانة (إيقاف التطبيق مؤقتاً)</h3>
+          <div class="switch-row">
+            <div><strong>تفعيل وضع الصيانة</strong><div style="font-size:12px;color:var(--muted);">يمنع إرسال الطلبات ويظهر رسالة الصيانة للمستخدمين</div></div>
+            <input type="checkbox" id="maintEnabled" style="width:22px;height:22px;" />
+          </div>
+          <div class="field"><label>رسالة الصيانة للمستخدمين</label><textarea id="maintMsg" rows="3"></textarea></div>
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 10px;">التحكم في ميزات التطبيق عن بُعد</h3>
+          <div class="switch-row"><span>تفعيل البحث التلقائي في الويب</span><input type="checkbox" id="featSearch" style="width:20px;height:20px;" /></div>
+          <div class="switch-row"><span>تفعيل الصور والأدوات التفاعلية</span><input type="checkbox" id="featVisuals" style="width:20px;height:20px;" /></div>
+          <div class="switch-row"><span>تفعيل توليد ملفات PDF</span><input type="checkbox" id="featPdf" style="width:20px;height:20px;" /></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-broadcast">
+        <div class="card">
+          <h3 style="margin:0 0 10px;">إشعار عام داخل التطبيق (Broadcast Banner)</h3>
+          <div class="switch-row">
+            <div><strong>إظهار الإشعار للمستخدمين عند فتح التطبيق</strong><div style="font-size:12px;color:var(--muted);">ممتاز للتنبيهات، التحديثات، أو العروض</div></div>
+            <input type="checkbox" id="annEnabled" style="width:22px;height:22px;" />
+          </div>
+          <div class="field"><label>عنوان الإشعار</label><input id="annTitle" placeholder="تحديث جديد في Cintra" /></div>
+          <div class="field"><label>نص الإشعار</label><textarea id="annMsg" rows="3" placeholder="أضفنا ميزة المخططات التفاعلية وتوليد PDF المحسّن!"></textarea></div>
+        </div>
+      </div>
+
+      <div class="page" id="page-stats">
+        <div class="stat-grid">
+          <div class="stat"><div style="font-size:12px;color:var(--muted);">إجمالي الطلبات</div><div class="stat-v" id="statTotal">0</div></div>
+          <div class="stat"><div style="font-size:12px;color:var(--muted);">النماذج المفعّلة</div><div class="stat-v" id="statModels">0 / 4</div></div>
+          <div class="stat"><div style="font-size:12px;color:var(--muted);">حالة التطبيق</div><div class="stat-v" id="statStatus">يعمل</div></div>
+        </div>
+        <div class="card">
+          <div style="font-size:13px;color:var(--muted);">آخر نشاط مسجّل: <strong id="statLast" style="color:var(--text);">—</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
 
   <script>
-    const PRESETS = [
-      { name: 'Nexora Fast (أسرع)', url: 'https://nexora-llm.onrender.com/v1', model: 'auto:fast' },
+    var STORAGE_KEY = 'cintra_admin_secret_v20';
+    var PRESETS = [
+      { name: 'Nexora Fast', url: 'https://nexora-llm.onrender.com/v1', model: 'auto:fast' },
       { name: 'Nexora Auto', url: 'https://nexora-llm.onrender.com/v1', model: 'auto' },
-      { name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
-      { name: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-reasoner' },
-      { name: 'Qwen', url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
-      { name: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-pro' },
-      { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-r1' },
-      { name: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' }
+      { name: 'Gemini 2.5 Flash', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' },
+      { name: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+      { name: 'OpenAI GPT-4o', url: 'https://api.openai.com/v1', model: 'gpt-4o' }
     ];
-
-    const grid = document.getElementById('modelsGrid');
-    const secretEl = document.getElementById('adminSecret');
-    const searchEl = document.getElementById('searchKey');
-    const toastBar = document.getElementById('toastBar');
-    let models = {};
-    let toastTimer = null;
+    var models = {};
+    var adminSecret = localStorage.getItem(STORAGE_KEY) || '';
 
     function notify(msg) {
-      toastBar.textContent = msg;
-      toastBar.classList.add('show');
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toastBar.classList.remove('show'), 2600);
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.display = 'block';
+      clearTimeout(window._tt);
+      window._tt = setTimeout(function(){ t.style.display = 'none'; }, 2800);
     }
 
-    document.getElementById('themeBtn').onclick = () => {
-      const r = document.documentElement;
+    document.getElementById('themeBtn').onclick = function() {
+      var r = document.documentElement;
       r.setAttribute('data-theme', r.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
     };
 
-    function render() {
+    document.querySelectorAll('.tab').forEach(function(btn) {
+      btn.onclick = function() {
+        document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('active'); });
+        document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+        btn.classList.add('active');
+        document.getElementById('page-' + btn.getAttribute('data-tab')).classList.add('active');
+      };
+    });
+
+    function renderModels() {
+      var grid = document.getElementById('modelsGrid');
       grid.innerHTML = '';
-      for (const [key, m] of Object.entries(models)) {
-        const card = document.createElement('div');
-        card.className = 'model-card';
-        var presetsHtml = PRESETS.map(function (p, i) {
-          return '<button class="preset-chip" type="button" data-preset="' + key + ':' + i + '">' + p.name + '</button>';
+      var activeCount = 0;
+      Object.keys(models).forEach(function(key) {
+        var m = models[key];
+        if (m.hasKey) activeCount++;
+        var presetsHtml = PRESETS.map(function(p, i) {
+          return '<button class="chip" type="button" data-preset="' + key + ':' + i + '">' + p.name + '</button>';
         }).join('');
+        var card = document.createElement('div');
+        card.className = 'card';
         card.innerHTML =
-          '<div class="model-head">' +
-            '<div>' +
-              '<strong style="font-size:16px;">' + m.label + '</strong>' +
-              '<span style="font-size:12px;color:var(--muted);margin-right:6px;">' + key + '</span>' +
-            '</div>' +
-            '<div style="display:flex;align-items:center;gap:8px;">' +
-              '<span class="badge ' + (m.hasKey ? 'badge-ok' : 'badge-warn') + '">' + (m.hasKey ? 'متصل • ' + m.apiKeyMasked : 'بدون مفتاح') + '</span>' +
-              '<button class="btn btn-soft" type="button" data-test="' + key + '">اختبار API</button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="preset-row">' + presetsHtml + '</div>' +
-          '<div class="field"><label>Base URL (OpenAI-Compatible)</label><input data-k="' + key + '" data-f="baseUrl" value="' + (m.baseUrl || '') + '" dir="ltr" /></div>' +
+          '<div class="row"><div><strong>' + m.label + '</strong> <span style="font-size:12px;color:var(--muted);">' + key + '</span></div>' +
+          '<div class="row"><span class="' + (m.hasKey ? 'badge-ok' : 'badge-warn') + '">' + (m.hasKey ? 'متصل • ' + m.apiKeyMasked : 'بدون مفتاح') + '</span>' +
+          '<button class="btn btn-soft" style="padding:6px 10px;font-size:12px;" data-test="' + key + '">اختبار</button></div></div>' +
+          '<div class="row" style="margin-top:10px;justify-content:flex-start;">' + presetsHtml + '</div>' +
+          '<div class="field"><label>Base URL</label><input data-k="' + key + '" data-f="baseUrl" value="' + (m.baseUrl || '') + '" dir="ltr" /></div>' +
           '<div class="field"><label>Model ID</label><input data-k="' + key + '" data-f="modelId" value="' + (m.modelId || '') + '" dir="ltr" /></div>' +
-          '<div class="field"><label>API Key (اتركه فارغاً للإبقاء على المفتاح المحفوظ)</label><input data-k="' + key + '" data-f="apiKey" type="password" placeholder="sk-..." dir="ltr" /></div>' +
-          '<div class="test-result" id="res-' + key + '"></div>';
+          '<div class="field"><label>API Key (فارغ = الإبقاء على المحفوظ)</label><input data-k="' + key + '" data-f="apiKey" type="password" placeholder="sk-..." dir="ltr" /></div>' +
+          '<div id="res-' + key + '" style="font-size:12px;margin-top:8px;"></div>';
         grid.appendChild(card);
-      }
+      });
+      document.getElementById('statModels').textContent = activeCount + ' / 4';
     }
 
-    grid.addEventListener('click', async (e) => {
-      const presetBtn = e.target.closest('[data-preset]');
-      if (presetBtn) {
-        const [key, idx] = presetBtn.getAttribute('data-preset').split(':');
-        const p = PRESETS[Number(idx)];
-        document.querySelector('input[data-k="' + key + '"][data-f="baseUrl"]').value = p.url;
-        document.querySelector('input[data-k="' + key + '"][data-f="modelId"]').value = p.model;
-        notify('تم تعبئة إعدادات ' + p.name);
+    document.getElementById('modelsGrid').addEventListener('click', async function(e) {
+      var pb = e.target.closest('[data-preset]');
+      if (pb) {
+        var parts = pb.getAttribute('data-preset').split(':');
+        var p = PRESETS[Number(parts[1])];
+        document.querySelector('input[data-k="' + parts[0] + '"][data-f="baseUrl"]').value = p.url;
+        document.querySelector('input[data-k="' + parts[0] + '"][data-f="modelId"]').value = p.model;
+        notify('تم تعبئة ' + p.name);
         return;
       }
-
-      const testBtn = e.target.closest('[data-test]');
-      if (testBtn) {
-        const key = testBtn.getAttribute('data-test');
-        const out = document.getElementById('res-' + key);
+      var tb = e.target.closest('[data-test]');
+      if (tb) {
+        var key = tb.getAttribute('data-test');
+        var out = document.getElementById('res-' + key);
         out.style.color = 'var(--accent)';
-        out.textContent = 'جارٍ اختبار الاتصال بالـ API...';
-        const res = await fetch('/api/admin/test', {
+        out.textContent = 'جارٍ الاختبار...';
+        var r = await fetch('/api/admin/test', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secretEl.value },
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': adminSecret },
           body: JSON.stringify({ modelKey: key })
         });
-        const data = await res.json();
-        if (data.ok) {
-          out.style.color = 'var(--ok)';
-          out.textContent = '✓ الاتصال ناجح (' + data.latencyMs + 'ms) — النموذج جاهز للتطبيق';
-        } else {
-          out.style.color = 'var(--err)';
-          out.textContent = '✗ فشل الاختبار: ' + (data.error || ('HTTP ' + data.status));
-        }
+        var d = await r.json();
+        out.style.color = d.ok ? 'var(--ok)' : 'var(--err)';
+        out.textContent = d.ok ? ('✓ ناجح (' + d.latencyMs + 'ms)') : ('✗ فشل: ' + (d.error || d.status));
       }
     });
 
-    async function loadConfig() {
-      const res = await fetch('/api/admin/config', { headers: { 'X-Admin-Secret': secretEl.value } });
-      const data = await res.json();
-      if (!res.ok) { notify(data.error || 'فشل التحميل'); return; }
-      models = data.models;
-      render();
-      notify(data.kvBound ? 'تم تحميل الإعدادات بنجاح' : 'تنبيه: اربط CINTRA_CONFIG أولاً');
-    }
-
-    async function saveConfig() {
-      const payload = {};
-      document.querySelectorAll('input[data-k]').forEach((inp) => {
-        const k = inp.getAttribute('data-k'), f = inp.getAttribute('data-f');
-        if (!payload[k]) payload[k] = { ...models[k] };
-        payload[k][f] = inp.value;
-      });
-      const res = await fetch('/api/admin/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secretEl.value },
-        body: JSON.stringify({ models: payload, searchApiKey: searchEl.value })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        searchEl.value = '';
-        notify('✓ تم حفظ جميع مفاتيح الـ API بأمان في Cloudflare KV');
-        loadConfig();
-      } else {
-        notify(data.error || 'فشل الحفظ');
+    async function loadDashboard(secret) {
+      var res = await fetch('/api/admin/config', { headers: { 'X-Admin-Secret': secret } });
+      var data = await res.json();
+      if (!res.ok) {
+        localStorage.removeItem(STORAGE_KEY);
+        notify(data.error || 'كلمة المرور غير صحيحة');
+        return false;
       }
+      adminSecret = secret;
+      localStorage.setItem(STORAGE_KEY, secret);
+      document.getElementById('loginView').style.display = 'none';
+      document.getElementById('appView').style.display = 'block';
+
+      models = data.models || {};
+      renderModels();
+      document.getElementById('kvStatus').textContent = data.kvBound ? 'KV متصل ✓' : 'اربط KV أولاً';
+      document.getElementById('imgBaseUrl').value = (data.imageApi && data.imageApi.baseUrl) || '';
+      document.getElementById('imgModelId').value = (data.imageApi && data.imageApi.modelId) || 'auto';
+      document.getElementById('searchMasked').textContent = data.hasSearchKey ? ('المفتاح المحفوظ: ' + data.searchKeyMasked) : 'لا يوجد مفتاح بحث محفوظ';
+      document.getElementById('maintEnabled').checked = Boolean(data.maintenance && data.maintenance.enabled);
+      document.getElementById('maintMsg').value = (data.maintenance && data.maintenance.message) || '';
+      document.getElementById('annEnabled').checked = Boolean(data.announcement && data.announcement.enabled);
+      document.getElementById('annTitle').value = (data.announcement && data.announcement.title) || '';
+      document.getElementById('annMsg').value = (data.announcement && data.announcement.message) || '';
+      document.getElementById('featSearch').checked = !(data.features && data.features.webSearch === false);
+      document.getElementById('featVisuals').checked = !(data.features && data.features.visuals === false);
+      document.getElementById('featPdf').checked = !(data.features && data.features.pdfExport === false);
+      document.getElementById('statTotal').textContent = (data.stats && data.stats.totalRequests) || 0;
+      document.getElementById('statLast').textContent = (data.stats && data.stats.lastRequestAt) || '—';
+      document.getElementById('statStatus').textContent = (data.maintenance && data.maintenance.enabled) ? 'في الصيانة' : 'يعمل';
+      return true;
     }
 
-    document.getElementById('loadBtn').onclick = loadConfig;
-    document.getElementById('saveBtn').onclick = saveConfig;
-    loadConfig().catch(() => {});
+    document.getElementById('loginBtn').onclick = function() {
+      loadDashboard(document.getElementById('loginSecret').value.trim());
+    };
+
+    document.getElementById('logoutBtn').onclick = function() {
+      localStorage.removeItem(STORAGE_KEY);
+      adminSecret = '';
+      document.getElementById('appView').style.display = 'none';
+      document.getElementById('loginView').style.display = 'flex';
+      notify('تم تسجيل الخروج');
+    };
+
+    document.getElementById('saveAllBtn').onclick = async function() {
+      var payloadModels = {};
+      document.querySelectorAll('input[data-k]').forEach(function(inp) {
+        var k = inp.getAttribute('data-k'), f = inp.getAttribute('data-f');
+        if (!payloadModels[k]) payloadModels[k] = { ...models[k] };
+        payloadModels[k][f] = inp.value;
+      });
+      var body = {
+        models: payloadModels,
+        searchApiKey: document.getElementById('searchApiKey').value,
+        imageApi: {
+          baseUrl: document.getElementById('imgBaseUrl').value,
+          modelId: document.getElementById('imgModelId').value,
+          apiKey: document.getElementById('imgApiKey').value
+        },
+        maintenance: {
+          enabled: document.getElementById('maintEnabled').checked,
+          message: document.getElementById('maintMsg').value
+        },
+        announcement: {
+          enabled: document.getElementById('annEnabled').checked,
+          title: document.getElementById('annTitle').value,
+          message: document.getElementById('annMsg').value
+        },
+        features: {
+          webSearch: document.getElementById('featSearch').checked,
+          visuals: document.getElementById('featVisuals').checked,
+          pdfExport: document.getElementById('featPdf').checked
+        }
+      };
+      var res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': adminSecret },
+        body: JSON.stringify(body)
+      });
+      var d = await res.json();
+      if (res.ok) {
+        document.getElementById('searchApiKey').value = '';
+        document.getElementById('imgApiKey').value = '';
+        notify('✓ تم حفظ جميع الإعدادات في Cloudflare KV');
+        loadDashboard(adminSecret);
+      } else {
+        notify(d.error || 'فشل الحفظ');
+      }
+    };
+
+    if (adminSecret) {
+      loadDashboard(adminSecret);
+    }
   </script>
 </body>
 </html>`;
