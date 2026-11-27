@@ -258,7 +258,7 @@ class CintraWorkerStreamService(
                     genUi = extractGenUiFromMarkdown(finalText),
                     generatedPdf = finalPdf,
                     generatedFile = extractGenericFileFromMarkdown(finalText, request.prompt),
-                    generatedPptx = extractPptxFromMarkdown(finalText),
+                    generatedPptx = extractPptxFromMarkdown(finalText, request.prompt),
                     generatedDocx = extractDocxFromMarkdown(finalText),
                     suggestions = extractSuggestionsFromMarkdown(finalText),
                 )
@@ -295,7 +295,7 @@ class CintraWorkerStreamService(
         }
 
         // ONLY auto-create .txt or .json when user asked for a prompt / JSON / text file (never .md for normal chats)
-        val askedForPdf = Regex("(pdf|بي دي اف|بي دي إف)", RegexOption.IGNORE_CASE).containsMatchIn(userPrompt)
+        val askedForPdf = Regex("(pdf|بي دي اف|بي دي إف|pptx|powerpoint|presentation|بريزنتيشن|باوربوينت)", RegexOption.IGNORE_CASE).containsMatchIn(userPrompt)
         if (!askedForPdf && !text.contains("```cintra-pdf")) {
             val askedForJson = Regex("(json|جيسون)", RegexOption.IGNORE_CASE).containsMatchIn(userPrompt)
             val askedForPromptOrTxt = Regex("(برومبت|prompt|ملف\\s*نصي|ملف\\s*تكست|\\.txt)", RegexOption.IGNORE_CASE)
@@ -328,7 +328,7 @@ class CintraWorkerStreamService(
         return emptyList()
     }
 
-    private fun extractPptxFromMarkdown(text: String): GeneratedPptxDoc? {
+    private fun extractPptxFromMarkdown(text: String, userPrompt: String): GeneratedPptxDoc? {
         Regex("```cintra-pptx\\s*([\\s\\S]*?)```").find(text)?.let { match ->
             return runCatching {
                 val obj = JSONObject(match.groupValues[1].trim())
@@ -345,6 +345,30 @@ class CintraWorkerStreamService(
                 }
                 if (slides.isNotEmpty()) GeneratedPptxDoc(title, fileName, slides, summary) else null
             }.getOrNull()
+        }
+        val askedForPptx = Regex("(pptx|powerpoint|presentation|بريزنتيشن|باوربوينت|عرض\\s*تقديمي)", RegexOption.IGNORE_CASE)
+            .containsMatchIn(userPrompt)
+        if (askedForPptx) {
+            val slideMatches = Regex("(?:#{1,3}\\s*)?(?:Slide|شريحة)\\s*\\d+[:\\-\\s]*([^\\n]+)([\\s\\S]*?)(?=(?:#{1,3}\\s*)?(?:Slide|شريحة)\\s*\\d+|$)", RegexOption.IGNORE_CASE)
+                .findAll(text)
+                .toList()
+            if (slideMatches.isNotEmpty()) {
+                val slides = slideMatches.map { sm ->
+                    val sTitle = sm.groupValues[1].replace("**", "").trim()
+                    val bullets = sm.groupValues[2].lines()
+                        .map { it.trim().removePrefix("-").removePrefix("*").removePrefix("•").replace("**", "").trim() }
+                        .filter { it.length >= 4 && !it.startsWith("```") }
+                        .take(5)
+                    PptxSlideData(title = sTitle.ifBlank { "Slide" }, bullets = bullets)
+                }
+                val deckTitle = slides.firstOrNull()?.title ?: "Cintra Presentation"
+                return GeneratedPptxDoc(
+                    title = deckTitle,
+                    fileName = "Cintra_Presentation.pptx",
+                    slides = slides,
+                    summary = "عرض تقديمي PowerPoint مصمم (${slides.size} شرائح)",
+                )
+            }
         }
         return null
     }

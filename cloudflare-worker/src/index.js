@@ -391,19 +391,32 @@ export default {
       const key = imgCfg.apiKey || cfg.models["cintra-pro"]?.apiKey || "";
       const base = (imgCfg.baseUrl || cfg.models["cintra-pro"]?.baseUrl || "").replace(/\/+$/, "");
       if (!base || !key) return jsonResponse({ error: "Image API not configured" }, 400);
-      try {
-        const resp = await fetch(base + "/images/generations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-          body: JSON.stringify({ model: imgCfg.modelId || "auto", prompt, n: 1, size: "1024x1024" })
-        });
-        const data = await resp.json();
-        const first = data?.data?.[0] || {};
-        if (first.url || first.b64_json) return jsonResponse({ url: first.url || "", b64_json: first.b64_json || "" });
-        return jsonResponse({ error: data?.error?.message || "Empty image response" }, 502);
-      } catch (e) {
-        return jsonResponse({ error: e.message || "Image generation failed" }, 502);
+      let lastErr = "تعذّر توليد الصورة، حاول مرة أخرى بعد ثوانٍ";
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const resp = await fetch(base + "/images/generations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+            body: JSON.stringify({ model: imgCfg.modelId || "auto", prompt, n: 1, size: "1024x1024" })
+          });
+          const data = await resp.json().catch(() => ({}));
+          const first = data?.data?.[0] || {};
+          const directUrl = first.url || data?.url || "";
+          const directB64 = first.b64_json || data?.b64_json || "";
+          if (directUrl || directB64) return jsonResponse({ url: directUrl, b64_json: directB64 });
+          lastErr = (resp.status === 503 || resp.status === 429)
+            ? "محرك الصور مشغول مؤقتاً (حد الطلبات)، اضغط إعادة بعد لحظات."
+            : (data?.error?.message || "تعذّر توليد الصورة");
+          if (attempt === 0 && (resp.status === 503 || resp.status === 429 || resp.status === 502)) {
+            await new Promise((r) => setTimeout(r, 2200));
+            continue;
+          }
+          break;
+        } catch (e) {
+          lastErr = e.message || "Image generation failed";
+        }
       }
+      return jsonResponse({ error: lastErr }, 502);
     }
 
     if (request.method === "POST" && url.pathname === "/v1/chat/stream") {

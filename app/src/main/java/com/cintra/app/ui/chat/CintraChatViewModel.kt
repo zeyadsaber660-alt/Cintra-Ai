@@ -31,6 +31,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 
 data class CintraChatUiState(
     val ready: Boolean = false,
@@ -135,12 +138,13 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     )
     val state: StateFlow<CintraChatUiState> = _state.asStateFlow()
 
-    private var streamJob: Job? = null
+    private val sessionJobs = mutableMapOf<String, Job>()
     private val localAttachmentCache = mutableMapOf<String, Attachment>()
 
     init {
         viewModelScope.launch {
-            val sessions = repository.getInitialSessions()
+            val loaded = loadPersistedSessions()
+            val sessions = if (loaded.isNotEmpty()) loaded else repository.getInitialSessions()
             _state.update {
                 it.copy(
                     ready = true,
@@ -149,6 +153,57 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                 )
             }
         }
+    }
+
+    private fun sessionsFile(): File = File(getApplication<Application>().filesDir, "cintra_sessions_v1.json")
+
+    private fun persistSessions() {
+        runCatching {
+            val arr = JSONArray()
+            _state.value.sessions.take(40).forEach { s ->
+                val sObj = JSONObject()
+                sObj.put("id", s.id)
+                sObj.put("title", s.title)
+                val mArr = JSONArray()
+                s.messages.takeLast(60).forEach { m ->
+                    val mObj = JSONObject()
+                    mObj.put("id", m.id)
+                    mObj.put("isUser", m.isUser)
+                    mObj.put("content", m.content)
+                    if (m.modelName != null) mObj.put("modelName", m.modelName)
+                    mArr.put(mObj)
+                }
+                sObj.put("messages", mArr)
+                arr.put(sObj)
+            }
+            sessionsFile().writeText(arr.toString(), Charsets.UTF_8)
+        }
+    }
+
+    private fun loadPersistedSessions(): List<ChatSession> {
+        return runCatching {
+            val f = sessionsFile()
+            if (!f.exists()) return emptyList()
+            val arr = JSONArray(f.readText(Charsets.UTF_8))
+            (0 until arr.length()).mapNotNull { i ->
+                val sObj = arr.optJSONObject(i) ?: return@mapNotNull null
+                val mArr = sObj.optJSONArray("messages") ?: JSONArray()
+                val msgs = (0 until mArr.length()).mapNotNull { j ->
+                    val mObj = mArr.optJSONObject(j) ?: return@mapNotNull null
+                    ChatMessage(
+                        id = mObj.optString("id", "m-$j"),
+                        isUser = mObj.optBoolean("isUser", false),
+                        content = mObj.optString("content", ""),
+                        modelName = mObj.optString("modelName", "").ifBlank { null },
+                    )
+                }
+                ChatSession(
+                    id = sObj.optString("id", "s-$i"),
+                    title = sObj.optString("title", "محادثة"),
+                    messages = msgs,
+                )
+            }
+        }.getOrDefault(emptyList())
     }
 
     private fun buildEffectiveInstructions(): String {
@@ -382,10 +437,11 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun switchSession(id: String) {
-        stopGeneration()
         _state.update {
+            val targetGenerating = sessionJobs[id]?.isActive == true
             it.copy(
                 activeSessionId = id,
+                isGenerating = targetGenerating,
                 plusMenuOpen = false,
                 modelPickerOpen = false,
                 artifactsOpen = false,
@@ -397,14 +453,19 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun newChat() {
-        stopGeneration()
         viewModelScope.launch {
+            val current = _state.value.activeSession
+            if (current != null && current.messages.isEmpty()) {
+                _state.update { it.copy(plusMenuOpen = false, modelPickerOpen = false, artifactsOpen = false) }
+                return@launch
+            }
             val title = if (_state.value.isArabic) "محادثة جديدة" else "New Chat"
             val session = repository.createSession(title)
             _state.update {
                 it.copy(
                     sessions = listOf(session) + it.sessions,
                     activeSessionId = session.id,
+                    isGenerating = false,
                     plusMenuOpen = false,
                     modelPickerOpen = false,
                     artifactsOpen = false,
@@ -413,6 +474,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                     activeTool = null,
                 )
             }
+            persistSessions()
         }
     }
 
@@ -570,12 +632,12 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
         )
         val assistantId = assistantMessage.id
 
-        streamJob?.cancel()
+        sessionJobs[sessionId]?.cancel()
         CintraBackgroundService.start(
             getApplication(),
             if (usedAttachments.isNotEmpty()) "جارٍ تحليل الملف وكتابة الرد في الخلفية..." else "جارٍ إكمال الرد في الخلفية...",
         )
-        streamJob = viewModelScope.launch {
+        sessionJobs[sessionId] = viewModelScope.launch {
             val pendingContent = StringBuilder()
             val pendingReasoning = StringBuilder()
             var lastFlushMs = 0L
@@ -589,7 +651,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                 pendingContent.clear()
                 pendingReasoning.clear()
                 lastFlushMs = now
-                updateActiveMessage(assistantId) {
+                updateSessionMessage(sessionId, assistantId) {
                     it.copy(
                         content = if (cDelta.isNotEmpty()) it.content + cDelta else it.content,
                         reasoning = if (rDelta.isNotEmpty()) (it.reasoning ?: "") + rDelta else it.reasoning,
@@ -600,7 +662,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
             streamService.streamReply(request).collect { chunk ->
                 when (chunk) {
                     is AiStreamChunk.StatusUpdate ->
-                        updateActiveMessage(assistantId) { it.copy(liveStatus = chunk.text) }
+                        updateSessionMessage(sessionId, assistantId) { it.copy(liveStatus = chunk.text) }
 
                     is AiStreamChunk.ReasoningDelta -> {
                         pendingReasoning.append(chunk.text)
@@ -609,14 +671,14 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
 
                     AiStreamChunk.ReasoningComplete -> {
                         flushBuffers(force = true)
-                        updateActiveMessage(assistantId) { it.copy(reasoningExpanded = false) }
+                        updateSessionMessage(sessionId, assistantId) { it.copy(reasoningExpanded = false) }
                     }
 
                     is AiStreamChunk.WebPhotosReady ->
-                        updateActiveMessage(assistantId) { it.copy(webPhotos = chunk.photos) }
+                        updateSessionMessage(sessionId, assistantId) { it.copy(webPhotos = chunk.photos) }
 
                     is AiStreamChunk.SourcesReady ->
-                        updateActiveMessage(assistantId) { it.copy(webSources = chunk.sources) }
+                        updateSessionMessage(sessionId, assistantId) { it.copy(webSources = chunk.sources) }
 
                     is AiStreamChunk.ContentDelta -> {
                         pendingContent.append(chunk.text)
@@ -625,7 +687,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
 
                     is AiStreamChunk.Complete -> {
                         flushBuffers(force = true)
-                        updateActiveMessage(assistantId) {
+                        updateSessionMessage(sessionId, assistantId) {
                             val cleanContent = stripGenUiBlocks(it.content)
                             it.copy(
                                 content = cleanContent,
@@ -639,8 +701,14 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                                 followUpSuggestions = chunk.suggestions.ifEmpty { it.followUpSuggestions },
                             )
                         }
-                        _state.update { s -> s.copy(isGenerating = false) }
-                        CintraBackgroundService.stop(getApplication())
+                        sessionJobs.remove(sessionId)
+                        _state.update { s ->
+                            s.copy(isGenerating = sessionJobs[s.activeSessionId]?.isActive == true)
+                        }
+                        persistSessions()
+                        if (sessionJobs.values.none { it.isActive }) {
+                            CintraBackgroundService.stop(getApplication())
+                        }
                         val doneTitle = if (chunk.generatedPdf != null) "ملف PDF جاهز في Cintra AI" else "اكتمل رد Cintra AI"
                         val doneBody = chunk.generatedPdf?.title ?: "اضغط للعودة وعرض الإجابة كاملة"
                         CintraBackgroundService.notifyDone(getApplication(), doneTitle, doneBody)
@@ -651,25 +719,43 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun stopGeneration() {
-        streamJob?.cancel()
-        streamJob = null
-        CintraBackgroundService.stop(getApplication())
-        if (_state.value.isGenerating) {
-            _state.update { s ->
-                val newSessions = s.sessions.map { session ->
-                    if (session.id == s.activeSessionId) {
-                        session.copy(messages = session.messages.map {
-                            if (it.isStreaming) it.copy(isStreaming = false) else it
-                        })
-                    } else session
-                }
-                s.copy(sessions = newSessions, isGenerating = false)
-            }
+        val activeId = _state.value.activeSessionId
+        sessionJobs.remove(activeId)?.cancel()
+        if (sessionJobs.values.none { it.isActive }) {
+            CintraBackgroundService.stop(getApplication())
         }
+        _state.update { s ->
+            val newSessions = s.sessions.map { session ->
+                if (session.id == activeId) {
+                    session.copy(messages = session.messages.map {
+                        if (it.isStreaming) it.copy(isStreaming = false) else it
+                    })
+                } else session
+            }
+            s.copy(sessions = newSessions, isGenerating = false)
+        }
+        persistSessions()
     }
 
     private fun stripGenUiBlocks(md: String): String =
         md.replace(Regex("```(?:genui-[a-z-]+|cintra-pdf|cintra-file|cintra-pptx|cintra-docx|cintra-suggestions)[\\s\\S]*?(?:```|$)"), "").trim()
+
+    private inline fun updateSessionMessage(
+        targetSessionId: String,
+        messageId: String,
+        crossinline transform: (ChatMessage) -> ChatMessage,
+    ) {
+        _state.update { s ->
+            val newSessions = s.sessions.map { session ->
+                if (session.id == targetSessionId) {
+                    session.copy(messages = session.messages.map {
+                        if (it.id == messageId) transform(it) else it
+                    })
+                } else session
+            }
+            s.copy(sessions = newSessions)
+        }
+    }
 
     private inline fun updateActiveMessage(
         messageId: String,

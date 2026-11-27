@@ -371,6 +371,7 @@ private fun GeneratedImageCard(prompt: String) {
     var isLoading by remember(prompt) { mutableStateOf(true) }
     var progressPct by remember(prompt) { mutableStateOf(8) }
     var errorMsg by remember(prompt) { mutableStateOf<String?>(null) }
+    var retryTick by remember(prompt) { mutableStateOf(0) }
     var fullscreenOpen by remember { mutableStateOf(false) }
 
     // Smooth ChatGPT-style progress ticker while waiting for user's Image API
@@ -383,7 +384,7 @@ private fun GeneratedImageCard(prompt: String) {
         }
     }
 
-    LaunchedEffect(prompt) {
+    LaunchedEffect(prompt, retryTick) {
         isLoading = true
         errorMsg = null
         val result = withContext(Dispatchers.IO) {
@@ -496,7 +497,16 @@ private fun GeneratedImageCard(prompt: String) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(CintraIcons.Images, contentDescription = null, tint = palette.rose, modifier = Modifier.size(20.dp))
-                Text(errorMsg.orEmpty(), color = palette.textSecondary, fontSize = 13.sp)
+                Text(errorMsg.orEmpty(), color = palette.textSecondary, fontSize = 12.5.sp, modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(palette.accent)
+                        .clickable { retryTick++ }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text("إعادة", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         } else {
             Box(
