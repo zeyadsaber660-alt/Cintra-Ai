@@ -17,7 +17,7 @@ const SMART_UI_DIRECTIVE = [
   "- For simple greetings (اهلا، مرحبا، hello), reply warmly in 1-2 short sentences with zero thinking.",
   "- Write clean natural Arabic (never mix random French/broken English words).",
   "- For educational explanations: intuitive definition + centered math equations in $$...$$ using Unicode symbols (∪, ∩, ∈, ∉, ⊆, ∅, ℕ, ℤ, ℝ) + NEVER use <br> inside Markdown tables + optional compact ```cintra-svg``` diagram (Venn/flowchart) + > callout boxes for rules/answers + short practice question at the end.",
-  "- PDF GENERATION (TOKEN-SAVING TEMPLATES): The app already has 4 built-in Tailwind+Cairo RTL templates (study_guide, report, invoice, cheat_sheet). When the user asks for a PDF, write a 1-sentence intro and emit ONLY the compact inner HTML body (using Tailwind classes, h2, table, .math, .box, .box-green, .box-amber) inside:",
+  "- PDF GENERATION (RICH & COMPLETE): The app has 4 built-in Tailwind+Cairo RTL templates (study_guide, report, invoice, cheat_sheet). When creating a study/midterm/report PDF, NEVER make a tiny superficial summary — write a rich, comprehensive, exam-ready document with: clear explanations of EVERY topic, multiple step-by-step solved numerical examples (مثال محلول), structured tables, common exam traps (أخطاء شائعة), and practice questions. Always use HTML <sup> for exponents (e.g. 2<sup>n</sup>, f<sup>-1</sup>, x<sup>2</sup> — NEVER write ^). Use <span class=\"math\"> for inline math inside sentences and <div class=\"math-block\"> ONLY for standalone centered equations. Emit inside:",
   "```cintra-pdf",
   "TITLE: عنوان المستند",
   "FILENAME: summary.pdf",

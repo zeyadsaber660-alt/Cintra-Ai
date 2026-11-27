@@ -253,7 +253,7 @@ class CintraWorkerStreamService(
                 )
             )
         } catch (e: java.io.IOException) {
-            emit(AiStreamChunk.StatusUpdate("انقطع الإنترنت • في انتظار عودة الاتصال للإكمال تلقائياً..."))
+            emit(AiStreamChunk.StatusUpdate("جارٍ العمل والمتابعة تلقائياً..."))
             delay(3_000L)
         } catch (_: Exception) {
             emit(AiStreamChunk.StatusUpdate("جارٍ إعادة المحاولة تلقائياً..."))

@@ -42,14 +42,25 @@ object CintraPdfExporter {
      * Wraps compact HTML body into a full, pre-styled Arabic RTL template with
      * Tailwind CSS CDN, Cairo/Tajawal fonts, and KaTeX auto-render for math.
      */
+
+    private fun formatHtmlExponents(html: String): String {
+        var s = html
+        // Convert f^(-1), 2^(n+1), x^{2} -> <sup>...</sup>
+        s = s.replace(Regex("([A-Za-z0-9)}\u0600-\u06FF])\^\(([^()]{1,12})\)"), "$1<sup>$2</sup>")
+        s = s.replace(Regex("([A-Za-z0-9)}\u0600-\u06FF])\^\{([^{}]{1,12})\}"), "$1<sup>$2</sup>")
+        s = s.replace(Regex("([A-Za-z0-9)}])\^(-?[A-Za-z0-9]{1,4})\b"), "$1<sup>$2</sup>")
+        return s
+    }
+
     fun buildFromTemplate(
         title: String,
         subtitle: String,
         bodyHtml: String,
         template: String = "study_guide",
     ): String {
-        if (bodyHtml.contains("<html", ignoreCase = true) && bodyHtml.contains("</html>", ignoreCase = true)) {
-            return ensureFullArabicHtml(title, bodyHtml)
+        val cleanBody = formatHtmlExponents(bodyHtml)
+        if (cleanBody.contains("<html", ignoreCase = true) && cleanBody.contains("</html>", ignoreCase = true)) {
+            return ensureFullArabicHtml(title, cleanBody)
         }
         val (heroGrad, accentHex, badgeLabel) = when (template.lowercase().trim()) {
             "invoice" -> Triple("from-slate-900 via-emerald-900 to-teal-700", "#059669", "فاتورة رسمية")
@@ -76,11 +87,13 @@ object CintraPdfExporter {
                 th { background: #0F172A; color: #FFFFFF; padding: 10px 12px; text-align: right; font-weight: 700; }
                 td { padding: 9px 12px; border-bottom: 1px solid #E2E8F0; }
                 tr:nth-child(even) td { background: #F8FAFC; }
-                .math { direction: ltr; unicode-bidi: plaintext; display: block; font-family: Georgia, serif; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px 14px; border-radius: 10px; text-align: center; margin: 8px 0; font-size: 15px; }
+                .math { direction: ltr; unicode-bidi: isolate; display: inline-block; font-family: Georgia, serif; background: #F1F5F9; border: 1px solid #E2E8F0; padding: 1px 7px; border-radius: 6px; margin: 0 2px; font-size: 13.5px; vertical-align: middle; }
+                .math-block { direction: ltr; unicode-bidi: isolate; display: block; font-family: Georgia, serif; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 9px 14px; border-radius: 10px; text-align: center; margin: 10px 0; font-size: 15px; }
+                sup { font-size: 0.72em; line-height: 0; position: relative; vertical-align: baseline; top: -0.45em; }
                 .box, blockquote { background: #F0F9FF; border-right: 4px solid $accentHex; padding: 12px 16px; border-radius: 10px; margin: 12px 0; }
                 .box-green { background: #ECFDF5; border-right: 4px solid #10B981; padding: 12px 16px; border-radius: 10px; margin: 12px 0; }
                 .box-amber { background: #FFFBEB; border-right: 4px solid #F59E0B; padding: 12px 16px; border-radius: 10px; margin: 12px 0; }
-                table, tr, .box, .box-green, .box-amber, .card { page-break-inside: avoid; break-inside: avoid; }
+                thead { display: table-header-group; } tr, .math-block { page-break-inside: avoid; break-inside: avoid; }
               </style>
             </head>
             <body class="bg-white text-slate-900 p-9">
@@ -92,7 +105,7 @@ object CintraPdfExporter {
                 </div>
               </div>
               <div class="space-y-4">
-                $bodyHtml
+                $cleanBody
               </div>
               <div class="mt-8 pt-4 border-t border-slate-200 text-center text-xs text-slate-400">
                 تم التصميم والتنسيق بواسطة Cintra AI
@@ -103,11 +116,11 @@ object CintraPdfExporter {
     }
 
     fun ensureFullArabicHtml(title: String, rawHtml: String): String {
-        val trimmed = rawHtml.trim()
+        val trimmed = formatHtmlExponents(rawHtml.trim())
         val viewportMeta = """<meta name="viewport" content="width=794, initial-scale=1.0, maximum-scale=1.0" />"""
         val tailwindScript = """<script src="https://cdn.tailwindcss.com"></script>"""
         val fontLinks = """<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />"""
-        val safeResetCss = """<style>html,body{width:794px;max-width:794px;margin:0 auto;box-sizing:border-box;overflow-x:hidden;font-family:'Cairo','Tajawal',sans-serif;-webkit-text-size-adjust:100%;background:#FFFFFF;color:#0F172A;}*{box-sizing:border-box;}table,tr,blockquote,.card,.callout{page-break-inside:avoid;break-inside:avoid;}</style>"""
+        val safeResetCss = """<style>html,body{width:794px;max-width:794px;margin:0 auto;box-sizing:border-box;overflow-x:hidden;font-family:'Cairo','Tajawal',sans-serif;-webkit-text-size-adjust:100%;background:#FFFFFF;color:#0F172A;}*{box-sizing:border-box;}thead{display:table-header-group;}tr,.math-block{page-break-inside:avoid;break-inside:avoid;}sup{font-size:0.72em;vertical-align:super;line-height:0;}</style>"""
 
         if (trimmed.contains("<html", ignoreCase = true) && trimmed.contains("</html>", ignoreCase = true)) {
             val hasTailwind = trimmed.contains("tailwindcss", ignoreCase = true)
@@ -185,12 +198,12 @@ object CintraPdfExporter {
                             val paginateJs = """
                                 (function(){
                                   var H = 1123, M = 34;
-                                  var els = document.querySelectorAll('h2,h3,p,tr,.box,.box-green,.box-amber,.math,blockquote,.card,div.rounded-xl,div.rounded-2xl');
+                                  var els = document.querySelectorAll('h2,h3,p,tr,.math-block,.box,.box-green,.box-amber');
                                   for (var i = 0; i < els.length; i++) {
                                     var el = els[i];
                                     var r = el.getBoundingClientRect();
                                     var h = r.height;
-                                    if (h <= 0 || h > H - M * 2) continue;
+                                    if (h <= 0 || h > 280) continue;
                                     var top = r.top + window.scrollY;
                                     var bottom = top + h;
                                     var pageIdx = Math.floor(top / H);

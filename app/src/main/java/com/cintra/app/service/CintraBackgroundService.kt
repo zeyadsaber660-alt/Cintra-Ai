@@ -99,6 +99,43 @@ class CintraBackgroundService : Service() {
             }
         }
 
+
+        private const val DONE_CHANNEL_ID = "cintra_bg_done"
+        private const val DONE_NOTIF_ID = 4042
+
+        fun notifyDone(context: Context, title: String, message: String) {
+            runCatching {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+                if (nm.getNotificationChannel(DONE_CHANNEL_ID) == null) {
+                    val ch = NotificationChannel(
+                        DONE_CHANNEL_ID,
+                        "Cintra Replies",
+                        NotificationManager.IMPORTANCE_HIGH,
+                    ).apply {
+                        description = "إشعار عند اكتمال رد أو ملف PDF في الخلفية"
+                    }
+                    nm.createNotificationChannel(ch)
+                }
+                val openIntent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pi = PendingIntent.getActivity(
+                    context,
+                    1,
+                    openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                val notif = Notification.Builder(context, DONE_CHANNEL_ID)
+                    .setContentTitle(title)
+                    .setContentText(message.take(120))
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setAutoCancel(true)
+                    .setContentIntent(pi)
+                    .build()
+                nm.notify(DONE_NOTIF_ID, notif)
+            }
+        }
+
         fun stop(context: Context) {
             runCatching {
                 context.stopService(Intent(context, CintraBackgroundService::class.java))

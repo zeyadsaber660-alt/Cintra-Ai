@@ -639,6 +639,9 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                         }
                         _state.update { s -> s.copy(isGenerating = false) }
                         CintraBackgroundService.stop(getApplication())
+                        val doneTitle = if (chunk.generatedPdf != null) "ملف PDF جاهز في Cintra AI" else "اكتمل رد Cintra AI"
+                        val doneBody = chunk.generatedPdf?.title ?: "اضغط للعودة وعرض الإجابة كاملة"
+                        CintraBackgroundService.notifyDone(getApplication(), doneTitle, doneBody)
                     }
                 }
             }
