@@ -53,6 +53,12 @@ object CintraPdfExporter {
             "&mathbb;R" to "ℝ", "&mathbb;C" to "ℂ", "&mathcal;P" to "𝒫",
             "\\mathbb{N}" to "ℕ", "\\mathbb{Z}" to "ℤ", "\\mathbb{Q}" to "ℚ",
             "\\mathbb{R}" to "ℝ", "\\mathbb{C}" to "ℂ", "\\mathcal{P}" to "𝒫",
+            "\\{" to "\u007B", "\\}" to "\u007D",
+            "\\qquad" to "  ", "\\quad" to "  ", "\\;" to " ", "\\," to " ", "\\:" to " ", "\\!" to "",
+            "\\cup" to "∪", "\\cap" to "∩", "\\subseteq" to "⊆", "\\subset" to "⊂",
+            "\\in" to "∈", "\\notin" to "∉", "\\varnothing" to "∅", "\\emptyset" to "∅",
+            "\\neq" to "≠", "\\leq" to "≤", "\\geq" to "≥", "\\times" to "×",
+            "\\forall" to "∀", "\\exists" to "∃", "\\iff" to "⇔", "\\implies" to "⇒",
         )
         for ((k, v) in entityFixes) s = s.replace(k, v)
         // Convert residual Markdown inside PDF HTML into clean styled HTML
@@ -94,7 +100,7 @@ object CintraPdfExporter {
                 html, body { width: 794px; max-width: 794px; margin: 0 auto; background: #FFFFFF; color: #0F172A; font-family: 'Cairo', 'Tajawal', sans-serif; line-height: 1.85; font-size: 14px; -webkit-text-size-adjust: 100%; }
                 * { box-sizing: border-box; }
                 .hero-fallback { background: linear-gradient(135deg, #0F172A 0%, $accentHex 100%); color: #FFFFFF; padding: 26px 30px; border-radius: 18px; margin-bottom: 22px; }
-                h2 { font-size: 17px; font-weight: 800; color: $accentHex; border-bottom: 2px solid #E0F2FE; padding-bottom: 5px; margin: 22px 0 10px; }
+                h2 { font-size: 17px; font-weight: 800; color: #0369A1; background: #F0F9FF; border-right: 4px solid $accentHex; padding: 8px 14px; border-radius: 10px; margin: 22px 0 12px; }
                 h3 { font-size: 15px; font-weight: 700; color: #1E293B; margin: 14px 0 6px; }
                 table { width: 100%; border-collapse: collapse; margin: 14px 0; border-radius: 12px; overflow: hidden; font-size: 13px; }
                 th { background: #0F172A; color: #FFFFFF; padding: 10px 12px; text-align: right; font-weight: 700; }

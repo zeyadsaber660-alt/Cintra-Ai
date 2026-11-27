@@ -493,6 +493,8 @@ private fun formatReadableMath(input: String, isolateLtr: Boolean = true): Strin
             "\\forall" to "∀", "\\exists" to "∃", "\\infty" to "∞",
             "\\cdots" to "…", "\\ldots" to "…", "\\dots" to "…",
             "\\mid" to "|", "\\{" to "\u007B", "\\}" to "\u007D",
+            "\\qquad" to "  ", "\\quad" to "  ", "\\;" to " ", "\\," to " ", "\\:" to " ", "\\!" to "",
+            "^c" to "ᶜ", "^2" to "²", "^3" to "³", "^n" to "ⁿ", "^-1" to "⁻¹", "^(-1)" to "⁻¹",
         )
         for ((k, v) in replacements) r = r.replace(k, v)
         return r

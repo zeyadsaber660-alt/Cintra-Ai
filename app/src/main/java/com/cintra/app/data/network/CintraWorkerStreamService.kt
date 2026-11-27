@@ -152,13 +152,18 @@ class CintraWorkerStreamService(
 
             val code = conn.responseCode
             if (code !in 200..299) {
+                if ((code == 502 || code == 503 || code == 504) && attempt < 3) {
+                    emit(AiStreamChunk.StatusUpdate("جارٍ تنشيط الخادم وإعادة المحاولة..."))
+                    delay(2_500L)
+                    continue
+                }
                 val errBody = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 val errMsg = runCatching { JSONObject(errBody).optString("error") }.getOrDefault("")
                 val friendly = when {
-                    code == 502 || code == 504 ->
-                        "خادم المزوّد تأخّر في الرد (رمز $code). جرّب التبديل إلى وضع `auto:fast` في لوحة التحكم أو أعد المحاولة الآن."
-                    errMsg.isNotBlank() -> "تعذّر إكمال الطلب ($code): $errMsg"
-                    else -> "تعذّر إكمال الطلب حالياً (رمز $code)."
+                    code == 502 || code == 503 || code == 504 ->
+                        "الخادم مشغول مؤقتاً الآن، اضغط إعادة للمحاولة."
+                    errMsg.isNotBlank() -> errMsg
+                    else -> "تعذّر إكمال الطلب حالياً، حاول مرة أخرى."
                 }
                 emit(AiStreamChunk.ContentDelta(friendly))
                 emit(AiStreamChunk.Complete(genUi = null))

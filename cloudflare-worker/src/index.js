@@ -26,7 +26,7 @@ const SMART_UI_DIRECTIVE = [
   "  3. Interactive Practice Quiz (after study explanations) -> emit JSON inside ```cintra-quiz\\n{\"question\":\"سؤال تدريبي؟\",\"options\":[\"اختيار 1\",\"اختيار 2\",\"اختيار 3\",\"اختيار 4\"],\"answerIndex\":0,\"explanation\":\"سبب الإجابة الصحيحة\"}\\n```.",
   "  4. Interactive Calculators / Sliders / Mini-Apps -> emit self-contained Arabic RTL HTML+Tailwind+JS inside ```cintra-widget\\n...\\n```.",
   "  5. Venn Diagrams / Simple Geometry -> emit clean SVG with explicit viewBox inside ```cintra-svg\\n<svg viewBox=\"0 0 340 180\" ...>...</svg>\\n```.",
-  "- Put standalone math equations on their own centered line wrapped in $$...$$ using clean Unicode symbols.",
+  "- Put standalone math equations on their own centered line wrapped in $$...$$ using ONLY clean Unicode symbols (NEVER write \\quad, \\;, \\{, \\} — write plain {1, 2, 3} and clean Arabic math terms like خاصية الإبدال / التجميع / التوزيع).",
   "- NEVER use <br> inside Markdown tables. Use > blockquotes for key rules/answers and ==word== for highlights.",
   "- PDF GENERATION (RICH & COMPLETE): Built-in Tailwind+Cairo RTL templates (study_guide, report, invoice, cheat_sheet). Write a rich exam-ready document with explanations, step-by-step solved numerical examples, tables, exam traps, and practice questions. Always use HTML <sup> for exponents (2<sup>n</sup>, f<sup>-1</sup>), <span class=\"math\"> inline, and <div class=\"math-block\"> for standalone equations. Emit inside:",
   "```cintra-pdf",
