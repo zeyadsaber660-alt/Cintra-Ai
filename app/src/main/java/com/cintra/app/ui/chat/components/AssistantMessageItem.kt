@@ -1176,3 +1176,15 @@ private fun highlightKotlin(code: String): AnnotatedString = buildAnnotatedStrin
     }
     append(code, last, code.length)
 }
+@Composable
+private fun CintraInteractiveWidgetCard(widgetMarkup: String) {
+    val palette = CintraThemePalette
+    val htmlDoc = remember(widgetMarkup, palette.isDark) {
+        val bg = if (palette.isDark) "#11151E" else "#F8FAFC"
+        val fg = if (palette.isDark) "#F1F5F9" else "#0F172A"
+        "<!DOCTYPE html><html dir=\"rtl\" lang=\"ar\"><head><meta charset=\"UTF-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0,maximum-scale=1.0\"/><script src=\"https://cdn.tailwindcss.com\"></script><link href=\"https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap\" rel=\"stylesheet\"/><style>html,body{margin:0;padding:12px;background:" + bg + ";color:" + fg + ";font-family:Cairo,sans-serif;box-sizing:border-box;}*{box-sizing:border-box;}</style></head><body>" + widgetMarkup + "</body></html>"
+    }
+    Box(modifier = Modifier.fillMaxWidth().height(310.dp).padding(vertical = 4.dp).clip(RoundedCornerShape(20.dp)).background(if (palette.isDark) Color(0xFF11151E) else Color(0xFFF8FAFC)).border(0.85.dp, palette.borderSubtle, RoundedCornerShape(20.dp))) {
+        AndroidView(factory = { ctx -> WebView(ctx).apply { setBackgroundColor(AndroidColor.TRANSPARENT); settings.javaScriptEnabled = true; settings.domStorageEnabled = true; loadDataWithBaseURL("https://cdn.tailwindcss.com", htmlDoc, "text/html", "UTF-8", null) } }, update = { wv -> wv.loadDataWithBaseURL("https://cdn.tailwindcss.com", htmlDoc, "text/html", "UTF-8", null) }, modifier = Modifier.fillMaxWidth().height(310.dp))
+    }
+}
