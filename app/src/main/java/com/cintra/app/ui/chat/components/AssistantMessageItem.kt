@@ -502,6 +502,7 @@ private fun formatReadableMath(input: String, isolateLtr: Boolean = true): Strin
             "\\cdots" to "…", "\\ldots" to "…", "\\dots" to "…",
             "\\mid" to "|", "\\{" to "\u007B", "\\}" to "\u007D",
             "\\qquad" to "  ", "\\quad" to "  ", "\\;" to " ", "\\," to " ", "\\:" to " ", "\\!" to "",
+            "\\Omega" to "Ω", "\\omega" to "ω", "\\pi" to "π", "\\alpha" to "α", "\\beta" to "β", "\\pm" to "±",
             "^c" to "ᶜ", "^2" to "²", "^3" to "³", "^n" to "ⁿ", "^-1" to "⁻¹", "^(-1)" to "⁻¹",
         )
         for ((k, v) in replacements) r = r.replace(k, v)
@@ -644,16 +645,16 @@ private fun MarkdownBody(
         h2 = TextStyle(fontSize = (18f * fontScale).sp, lineHeight = (26f * fontScale).sp, fontWeight = FontWeight.Bold),
         h3 = TextStyle(fontSize = (16f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.SemiBold),
         h4 = TextStyle(fontSize = (15.5f * fontScale).sp, lineHeight = (23f * fontScale).sp, fontWeight = FontWeight.SemiBold),
-        text = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.Normal),
-        paragraph = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.Normal),
+        text = TextStyle(fontSize = (15.5f * fontScale).sp, lineHeight = (26.5f * fontScale).sp, fontWeight = FontWeight.Normal),
+        paragraph = TextStyle(fontSize = (15.5f * fontScale).sp, lineHeight = (26.5f * fontScale).sp, fontWeight = FontWeight.Normal),
         ordered = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.Normal),
-        bullet = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (24f * fontScale).sp, fontWeight = FontWeight.Normal),
+        bullet = TextStyle(fontSize = (15.5f * fontScale).sp, lineHeight = (26.5f * fontScale).sp, fontWeight = FontWeight.Normal),
         quote = TextStyle(fontSize = (14f * fontScale).sp, lineHeight = (22f * fontScale).sp, fontStyle = FontStyle.Normal),
     )
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         segments.forEach { segment ->
             when (segment) {
@@ -703,8 +704,7 @@ private fun CintraDisplayMathCard(expr: String, fontScale: Float) {
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(palette.surface.copy(alpha = 0.72f))
-                .border(0.7.dp, palette.borderSubtle, RoundedCornerShape(14.dp))
+                .background(palette.surface.copy(alpha = 0.45f))
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center,

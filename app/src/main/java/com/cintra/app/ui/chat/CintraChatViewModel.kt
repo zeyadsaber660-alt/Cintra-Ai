@@ -171,6 +171,30 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                     mObj.put("isUser", m.isUser)
                     mObj.put("content", m.content)
                     if (m.modelName != null) mObj.put("modelName", m.modelName)
+                    if (m.attachments.isNotEmpty()) {
+                        val aArr = JSONArray()
+                        m.attachments.forEach { a ->
+                            aArr.put(JSONObject().apply {
+                                put("type", a.type.name)
+                                put("name", a.name)
+                                if (a.uri != null) put("uri", a.uri)
+                                put("mimeType", a.mimeType)
+                                if (a.pageCount != null) put("pageCount", a.pageCount)
+                            })
+                        }
+                        mObj.put("attachments", aArr)
+                    }
+                    m.generatedPdf?.let { pdf ->
+                        mObj.put("generatedPdf", JSONObject().apply {
+                            put("title", pdf.title)
+                            put("fileName", pdf.fileName)
+                            put("htmlContent", pdf.htmlContent)
+                            put("summary", pdf.summary)
+                        })
+                    }
+                    if (m.followUpSuggestions.isNotEmpty()) {
+                        mObj.put("suggestions", JSONArray(m.followUpSuggestions))
+                    }
                     mArr.put(mObj)
                 }
                 sObj.put("messages", mArr)
@@ -190,11 +214,38 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                 val mArr = sObj.optJSONArray("messages") ?: JSONArray()
                 val msgs = (0 until mArr.length()).mapNotNull { j ->
                     val mObj = mArr.optJSONObject(j) ?: return@mapNotNull null
+                    val attArr = mObj.optJSONArray("attachments")
+                    val atts = if (attArr != null) {
+                        (0 until attArr.length()).mapNotNull { k ->
+                            val ao = attArr.optJSONObject(k) ?: return@mapNotNull null
+                            Attachment(
+                                type = runCatching { AttachmentType.valueOf(ao.optString("type", "FILE")) }.getOrDefault(AttachmentType.FILE),
+                                name = ao.optString("name", "ملف"),
+                                uri = ao.optString("uri", "").ifBlank { null },
+                                mimeType = ao.optString("mimeType", ""),
+                                pageCount = if (ao.has("pageCount")) ao.optInt("pageCount") else null,
+                            )
+                        }
+                    } else emptyList()
+                    val pdfObj = mObj.optJSONObject("generatedPdf")
+                    val pdf = if (pdfObj != null) {
+                        com.cintra.app.ui.model.GeneratedPdfDoc(
+                            title = pdfObj.optString("title", "مستند"),
+                            fileName = pdfObj.optString("fileName", "document.pdf"),
+                            htmlContent = pdfObj.optString("htmlContent", ""),
+                            summary = pdfObj.optString("summary", ""),
+                        )
+                    } else null
+                    val sugArr = mObj.optJSONArray("suggestions")
+                    val sugs = if (sugArr != null) (0 until sugArr.length()).mapNotNull { k -> sugArr.optString(k).takeIf { it.isNotBlank() } } else emptyList()
                     ChatMessage(
                         id = mObj.optString("id", "m-$j"),
                         isUser = mObj.optBoolean("isUser", false),
                         content = mObj.optString("content", ""),
                         modelName = mObj.optString("modelName", "").ifBlank { null },
+                        attachments = atts,
+                        generatedPdf = pdf,
+                        followUpSuggestions = sugs,
                     )
                 }
                 ChatSession(
