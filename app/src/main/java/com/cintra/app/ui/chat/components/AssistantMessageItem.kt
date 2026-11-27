@@ -259,7 +259,7 @@ private fun AssistantRow(
         val isBuildingGenUi = message.isStreaming && message.content.contains("```genui-")
         val visibleContent = remember(message.content, message.isStreaming) {
             var cleaned = message.content
-            for (tag in listOf("```cintra-pdf", "```cintra-file", "```cintra-suggestions", "```genui-")) {
+            for (tag in listOf("```cintra-pdf", "```cintra-file", "```cintra-pptx", "```cintra-docx", "```cintra-suggestions", "```genui-")) {
                 if (cleaned.contains(tag)) cleaned = cleaned.substringBefore(tag)
             }
             // Hide an unclosed ```cintra-svg block while it is still streaming
@@ -332,6 +332,14 @@ private fun AssistantRow(
 
         if (!message.isStreaming && message.generatedPdf != null) {
             GeneratedPdfFileCard(pdf = message.generatedPdf)
+        }
+
+        if (!message.isStreaming && message.generatedPptx != null) {
+            GeneratedPptxCard(pptx = message.generatedPptx)
+        }
+
+        if (!message.isStreaming && message.generatedDocx != null) {
+            GeneratedDocxCard(docx = message.generatedDocx)
         }
 
         if (!message.isStreaming && message.generatedFile != null) {
@@ -561,7 +569,7 @@ private fun splitMarkdown(md: String): List<MdSegment> {
             } else if (lowerLang == "cintra-quiz") {
                 val qJson = code.toString().trim()
                 if (qJson.isNotBlank()) segments.add(MdSegment.QuizSegment(qJson))
-            } else if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file" && lowerLang != "cintra-suggestions") {
+            } else if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file" && lowerLang != "cintra-suggestions" && lowerLang != "cintra-pptx" && lowerLang != "cintra-docx") {
                 segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
             }
             i++

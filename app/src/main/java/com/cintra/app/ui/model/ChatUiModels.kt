@@ -55,6 +55,20 @@ data class GeneratedGenericFile(
     val summary: String = "",
 )
 
+data class GeneratedPptxDoc(
+    val title: String,
+    val fileName: String,
+    val slides: List<com.cintra.app.utils.PptxSlideData>,
+    val summary: String = "",
+)
+
+data class GeneratedDocxDoc(
+    val title: String,
+    val fileName: String,
+    val sections: List<com.cintra.app.utils.DocxSectionData>,
+    val summary: String = "",
+)
+
 sealed interface GenUi {
     data class Comparison(
         val activeTab: String = "speed",
@@ -91,6 +105,8 @@ data class ChatMessage(
     val webSources: List<WebSourceItem> = emptyList(),
     val generatedPdf: GeneratedPdfDoc? = null,
     val generatedFile: GeneratedGenericFile? = null,
+    val generatedPptx: GeneratedPptxDoc? = null,
+    val generatedDocx: GeneratedDocxDoc? = null,
     val followUpSuggestions: List<String> = emptyList(),
 )
 
@@ -119,6 +135,8 @@ sealed interface AiStreamChunk {
         val genUi: GenUi?,
         val generatedPdf: GeneratedPdfDoc? = null,
         val generatedFile: GeneratedGenericFile? = null,
+        val generatedPptx: GeneratedPptxDoc? = null,
+        val generatedDocx: GeneratedDocxDoc? = null,
         val suggestions: List<String> = emptyList(),
     ) : AiStreamChunk
 }

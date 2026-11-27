@@ -8,7 +8,11 @@ import com.cintra.app.ui.model.ChecklistItem
 import com.cintra.app.ui.model.CintraModelId
 import com.cintra.app.ui.model.GenUi
 import com.cintra.app.ui.model.GeneratedGenericFile
+import com.cintra.app.ui.model.GeneratedDocxDoc
 import com.cintra.app.ui.model.GeneratedPdfDoc
+import com.cintra.app.ui.model.GeneratedPptxDoc
+import com.cintra.app.utils.DocxSectionData
+import com.cintra.app.utils.PptxSlideData
 import com.cintra.app.ui.model.MetricItem
 import com.cintra.app.ui.model.VisualGridItem
 import com.cintra.app.ui.model.WebPhotoItem
@@ -254,6 +258,8 @@ class CintraWorkerStreamService(
                     genUi = extractGenUiFromMarkdown(finalText),
                     generatedPdf = finalPdf,
                     generatedFile = extractGenericFileFromMarkdown(finalText, request.prompt),
+                    generatedPptx = extractPptxFromMarkdown(finalText),
+                    generatedDocx = extractDocxFromMarkdown(finalText),
                     suggestions = extractSuggestionsFromMarkdown(finalText),
                 )
             )
@@ -320,6 +326,48 @@ class CintraWorkerStreamService(
             }.getOrDefault(emptyList())
         }
         return emptyList()
+    }
+
+    private fun extractPptxFromMarkdown(text: String): GeneratedPptxDoc? {
+        Regex("```cintra-pptx\\s*([\\s\\S]*?)```").find(text)?.let { match ->
+            return runCatching {
+                val obj = JSONObject(match.groupValues[1].trim())
+                val title = obj.optString("title", "Cintra Presentation")
+                val fileName = obj.optString("fileName", "Cintra_Presentation.pptx")
+                    .let { if (it.endsWith(".pptx", true)) it else "$it.pptx" }
+                val summary = obj.optString("summary", "عرض تقديمي PowerPoint جاهز للتحميل")
+                val arr = obj.optJSONArray("slides") ?: return@runCatching null
+                val slides = (0 until arr.length()).mapNotNull { i ->
+                    val s = arr.optJSONObject(i) ?: return@mapNotNull null
+                    val bArr = s.optJSONArray("bullets")
+                    val bullets = if (bArr != null) (0 until bArr.length()).mapNotNull { j -> bArr.optString(j).takeIf { it.isNotBlank() } } else emptyList()
+                    PptxSlideData(title = s.optString("title", "Slide ${i + 1}"), bullets = bullets)
+                }
+                if (slides.isNotEmpty()) GeneratedPptxDoc(title, fileName, slides, summary) else null
+            }.getOrNull()
+        }
+        return null
+    }
+
+    private fun extractDocxFromMarkdown(text: String): GeneratedDocxDoc? {
+        Regex("```cintra-docx\\s*([\\s\\S]*?)```").find(text)?.let { match ->
+            return runCatching {
+                val obj = JSONObject(match.groupValues[1].trim())
+                val title = obj.optString("title", "Cintra Document")
+                val fileName = obj.optString("fileName", "Cintra_Document.docx")
+                    .let { if (it.endsWith(".docx", true)) it else "$it.docx" }
+                val summary = obj.optString("summary", "مستند Word جاهز للتحميل")
+                val arr = obj.optJSONArray("sections") ?: return@runCatching null
+                val sections = (0 until arr.length()).mapNotNull { i ->
+                    val s = arr.optJSONObject(i) ?: return@mapNotNull null
+                    val pArr = s.optJSONArray("paragraphs")
+                    val paras = if (pArr != null) (0 until pArr.length()).mapNotNull { j -> pArr.optString(j).takeIf { it.isNotBlank() } } else emptyList()
+                    DocxSectionData(heading = s.optString("heading", ""), paragraphs = paras)
+                }
+                if (sections.isNotEmpty()) GeneratedDocxDoc(title, fileName, sections, summary) else null
+            }.getOrNull()
+        }
+        return null
     }
 
     private fun extractPdfFromMarkdown(text: String): GeneratedPdfDoc? {

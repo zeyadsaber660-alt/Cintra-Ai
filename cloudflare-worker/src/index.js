@@ -43,6 +43,7 @@ const SMART_UI_DIRECTIVE = [
 ].join("\n");
 
 const DEFAULT_CONFIG = {
+  searchApiUrl: "https://api.tavily.com/search",
   searchApiKey: "",
   imageApi: { baseUrl: "https://nexora-llm.onrender.com/v1", modelId: "auto", apiKey: "" },
   maintenance: { enabled: false, message: "التطبيق قيد الصيانة السريعة حالياً لتحسين الأداء، سنعود خلال دقائق." },
@@ -104,6 +105,7 @@ async function loadConfig(env) {
   try {
     const parsed = JSON.parse(raw);
     return {
+      searchApiUrl: parsed.searchApiUrl || "https://api.tavily.com/search",
       searchApiKey: parsed.searchApiKey || "",
       imageApi: { ...base.imageApi, ...(parsed.imageApi || {}) },
       maintenance: { ...base.maintenance, ...(parsed.maintenance || {}) },
@@ -158,11 +160,11 @@ function needsAutoWebSearch(prompt, tool, autoEnabled) {
   return /(دور|دورلي|ابحث|بحث|صح ولا لا|حقيقة|تأكد|تأكيد|مصدر|مصادر|وشاح|طرق السفر|سفر|السفر|فيزا|تأشيرة|هجرة|سعر|اسعار|أسعار|اليوم|أحدث|أخبار|طقس|2025|2026|2027|search|verify|fact check|travel|visa|latest|news|price|weather|today|current)/i.test(prompt);
 }
 
-async function runAutoWebSearch(query, tavilyApiKey) {
+async function runAutoWebSearch(query, tavilyApiKey, searchApiUrl) {
   const sources = [];
   try {
     if (tavilyApiKey) {
-      const resp = await fetch("https://api.tavily.com/search", {
+      const resp = await fetch(searchApiUrl || "https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 4, include_answer: true, search_depth: "basic" })
@@ -293,6 +295,7 @@ export default {
       }
       return jsonResponse({
         models: maskedModels,
+        searchApiUrl: cfg.searchApiUrl || "https://api.tavily.com/search",
         hasSearchKey: Boolean(cfg.searchApiKey),
         searchKeyMasked: maskKey(cfg.searchApiKey),
         imageApi: {
@@ -315,6 +318,7 @@ export default {
       const existing = await loadConfig(env);
       const incoming = await request.json();
       const updated = {
+        searchApiUrl: (incoming.searchApiUrl || existing.searchApiUrl || "https://api.tavily.com/search").trim(),
         searchApiKey: incoming.searchApiKey && incoming.searchApiKey.trim() !== ""
           ? incoming.searchApiKey.trim()
           : existing.searchApiKey,
@@ -431,7 +435,7 @@ export default {
       const shouldSearch = cfg.features?.webSearch !== false && needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false);
       const [urlContext, searchRes, prefetchedPhotos] = await Promise.all([
         withTimeout(fetchUrlContext(lastUserPrompt), 2800, ""),
-        shouldSearch ? withTimeout(runAutoWebSearch(lastUserPrompt, cfg.searchApiKey), 2800, { text: "", sources: [] }) : Promise.resolve({ text: "", sources: [] }),
+        shouldSearch ? withTimeout(runAutoWebSearch(lastUserPrompt, cfg.searchApiKey, cfg.searchApiUrl), 2800, { text: "", sources: [] }) : Promise.resolve({ text: "", sources: [] }),
         cfg.features?.visuals !== false && body.illustrativeImages !== false ? withTimeout(fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey), 2200, []) : Promise.resolve([])
       ]);
 
@@ -608,7 +612,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         </div>
         <div class="card">
           <h3 style="margin:0 0 8px;">محرك البحث المباشر (Tavily Search API)</h3>
-          <div class="field"><label>Tavily API Key (اتركه فارغاً للإبقاء على المفتاح المحفوظ)</label><input id="searchApiKey" type="password" dir="ltr" placeholder="tvly-..." /></div>
+          <div class="field"><label>Search API URL (افتراضي: Tavily أو رابط محركك)</label><input id="searchApiUrl" dir="ltr" placeholder="https://api.tavily.com/search" /></div>
+          <div class="field"><label>Search API Key (اتركه فارغاً للإبقاء على المفتاح المحفوظ)</label><input id="searchApiKey" type="password" dir="ltr" placeholder="tvly-..." /></div>
           <div id="searchMasked" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
         </div>
       </div>
@@ -761,6 +766,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
       document.getElementById('kvStatus').textContent = data.kvBound ? 'KV متصل ✓' : 'اربط KV أولاً';
       document.getElementById('imgBaseUrl').value = (data.imageApi && data.imageApi.baseUrl) || '';
       document.getElementById('imgModelId').value = (data.imageApi && data.imageApi.modelId) || 'auto';
+      document.getElementById('searchApiUrl').value = data.searchApiUrl || 'https://api.tavily.com/search';
       document.getElementById('searchMasked').textContent = data.hasSearchKey ? ('المفتاح المحفوظ: ' + data.searchKeyMasked) : 'لا يوجد مفتاح بحث محفوظ';
       document.getElementById('maintEnabled').checked = Boolean(data.maintenance && data.maintenance.enabled);
       document.getElementById('maintMsg').value = (data.maintenance && data.maintenance.message) || '';
@@ -797,6 +803,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
       });
       var body = {
         models: payloadModels,
+        searchApiUrl: document.getElementById('searchApiUrl').value,
         searchApiKey: document.getElementById('searchApiKey').value,
         imageApi: {
           baseUrl: document.getElementById('imgBaseUrl').value,

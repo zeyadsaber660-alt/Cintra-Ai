@@ -241,7 +241,7 @@ object CintraPdfExporter {
                             try {
                                 val jsHeight = jsHeightStr?.trim('"')?.toDoubleOrNull()?.toInt() ?: 0
                                 val rawContentHeight = maxOf(webView.contentHeight, jsHeight, pageHeightPx)
-                                val measuredContentPx = rawContentHeight.coerceAtMost(pageHeightPx * 24)
+                                val measuredContentPx = rawContentHeight.coerceAtMost(pageHeightPx * 60)
 
                                 webView.measure(
                                     View.MeasureSpec.makeMeasureSpec(pageWidthPx, View.MeasureSpec.EXACTLY),
@@ -343,7 +343,8 @@ object CintraPdfExporter {
                 val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                     ?: throw IllegalStateException("تعذّر إنشاء الملف في التنزيلات")
                 resolver.openOutputStream(uri)?.use { out ->
-                    out.write(content.toByteArray(Charsets.UTF_8))
+                    val payload = if (safeName.endsWith(".csv", true)) "\uFEFF$content" else content
+                    out.write(payload.toByteArray(Charsets.UTF_8))
                 }
                 values.clear()
                 values.put(MediaStore.Downloads.IS_PENDING, 0)
