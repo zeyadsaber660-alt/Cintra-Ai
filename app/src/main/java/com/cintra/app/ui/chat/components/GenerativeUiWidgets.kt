@@ -35,7 +35,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.asImageBitmap
+import com.cintra.app.data.security.CintraSecureVault
 import com.cintra.app.ui.model.GenUi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
@@ -338,10 +349,53 @@ private fun ChecklistCard(checklist: GenUi.Checklist, onToggle: (Int) -> Unit) {
 @Composable
 private fun GeneratedImageCard(prompt: String) {
     val palette = CintraThemePalette
-    val imageUrl = remember(prompt) {
-        "https://image.pollinations.ai/prompt/${Uri.encode(prompt)}?width=1024&height=768&nologo=true"
+    var resolvedUrl by remember(prompt) { mutableStateOf<String?>(null) }
+    var decodedBitmap by remember(prompt) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var isLoading by remember(prompt) { mutableStateOf(true) }
+    var errorMsg by remember(prompt) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(prompt) {
+        isLoading = true
+        errorMsg = null
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                val endpoint = "${CintraSecureVault.resolveEndpoint()}/v1/images/generate"
+                val token = CintraSecureVault.resolveAppToken()
+                val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 20_000
+                    readTimeout = 60_000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
+                }
+                conn.outputStream.use { os ->
+                    os.write(JSONObject().put("prompt", prompt).toString().toByteArray(Charsets.UTF_8))
+                }
+                val code = conn.responseCode
+                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                conn.disconnect()
+                val json = JSONObject(body)
+                val url = json.optString("url", "")
+                val b64 = json.optString("b64_json", "")
+                Pair(url, b64)
+            }.getOrNull()
+        }
+        if (result != null && result.second.isNotBlank()) {
+            val bytes = runCatching { Base64.decode(result.second, Base64.DEFAULT) }.getOrNull()
+            decodedBitmap = bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+            isLoading = false
+        } else if (result != null && result.first.startsWith("http")) {
+            resolvedUrl = result.first
+            isLoading = false
+        } else {
+            // Fallback only if custom image API is not configured yet
+            resolvedUrl = "https://image.pollinations.ai/prompt/${Uri.encode(prompt)}?width=1024&height=768&nologo=true"
+            isLoading = false
+        }
     }
-    var isLoading by remember(imageUrl) { mutableStateOf(true) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -352,25 +406,32 @@ private fun GeneratedImageCard(prompt: String) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(230.dp)
+                .height(235.dp)
                 .background(palette.surface2),
             contentAlignment = Alignment.Center,
         ) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = prompt,
-                contentScale = ContentScale.Crop,
-                onSuccess = { isLoading = false },
-                onError = { isLoading = false },
-                modifier = Modifier.matchParentSize(),
-            )
+            if (decodedBitmap != null) {
+                Image(
+                    bitmap = decodedBitmap!!.asImageBitmap(),
+                    contentDescription = prompt,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+            } else if (resolvedUrl != null) {
+                AsyncImage(
+                    model = resolvedUrl,
+                    contentDescription = prompt,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
             if (isLoading) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     CircularProgressIndicator(color = palette.accent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-                    Text("جارٍ توليد الصورة...", color = palette.textSecondary, fontSize = 12.5.sp)
+                    Text("جارٍ توليد الصورة عبر محركك...", color = palette.textSecondary, fontSize = 12.5.sp)
                 }
             }
         }

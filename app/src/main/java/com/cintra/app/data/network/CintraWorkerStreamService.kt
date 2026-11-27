@@ -14,6 +14,7 @@ import com.cintra.app.ui.model.VisualGridItem
 import com.cintra.app.ui.model.WebPhotoItem
 import com.cintra.app.utils.CintraPdfExporter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -126,6 +127,12 @@ class CintraWorkerStreamService(
         val fullContent = StringBuilder()
         val fullReasoning = StringBuilder()
 
+        var attempt = 0
+        var succeeded = false
+        while (!succeeded && attempt < 180) {
+            attempt++
+            fullContent.clear()
+            fullReasoning.clear()
         try {
             conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -236,18 +243,29 @@ class CintraWorkerStreamService(
             if (finalText.isBlank() && rescuedPdf != null) {
                 emit(AiStreamChunk.ContentDelta("تم تجهيز ملف الـ PDF المطلوب بنجاح، يمكنك تحميله الآن:"))
             }
+            succeeded = true
             emit(
                 AiStreamChunk.Complete(
                     genUi = extractGenUiFromMarkdown(finalText),
                     generatedPdf = finalPdf,
                     generatedFile = extractGenericFileFromMarkdown(finalText, request.prompt),
+                    suggestions = extractSuggestionsFromMarkdown(finalText),
                 )
             )
+        } catch (e: java.io.IOException) {
+            emit(AiStreamChunk.StatusUpdate("انقطع الإنترنت • في انتظار عودة الاتصال للإكمال تلقائياً..."))
+            delay(3_000L)
         } catch (_: Exception) {
-            emit(AiStreamChunk.ContentDelta("تعذّر الاتصال بالإنترنت أو انتهت مهلة الخادم. حاول مرة أخرى."))
-            emit(AiStreamChunk.Complete(genUi = null))
+            emit(AiStreamChunk.StatusUpdate("جارٍ إعادة المحاولة تلقائياً..."))
+            delay(3_000L)
         } finally {
             conn?.disconnect()
+            conn = null
+        }
+        }
+        if (!succeeded) {
+            emit(AiStreamChunk.ContentDelta("انتهت مهلة انتظار عودة الاتصال. أعد المحاولة عند توفر الإنترنت."))
+            emit(AiStreamChunk.Complete(genUi = null))
         }
     }.flowOn(Dispatchers.IO)
 
@@ -265,27 +283,38 @@ class CintraWorkerStreamService(
             return GeneratedGenericFile(title, fileName, mime, body, summary)
         }
 
+        // ONLY auto-create .txt or .json when user asked for a prompt / JSON / text file (never .md for normal chats)
         val askedForPdf = Regex("(pdf|بي دي اف|بي دي إف)", RegexOption.IGNORE_CASE).containsMatchIn(userPrompt)
         if (!askedForPdf && !text.contains("```cintra-pdf")) {
-            val askedForTextOrPrompt = Regex("(برومبت|prompt|ملف\\s*نصي|ملف\\s*تكست|\\.txt|\\.md|markdown)", RegexOption.IGNORE_CASE)
+            val askedForJson = Regex("(json|جيسون)", RegexOption.IGNORE_CASE).containsMatchIn(userPrompt)
+            val askedForPromptOrTxt = Regex("(برومبت|prompt|ملف\\s*نصي|ملف\\s*تكست|\\.txt)", RegexOption.IGNORE_CASE)
                 .containsMatchIn(userPrompt)
-            val isVeryLong = text.length >= 2600
-            if ((askedForTextOrPrompt && text.length >= 700) || isVeryLong) {
-                val clean = text.replace(Regex("```genui-[a-z-]+\\s*[\\s\\S]*?(?:```|$)"), "").trim()
-                val looksLikeMd = clean.contains("\n#") || clean.contains("\n##") || clean.contains("|---") || clean.contains("**")
-                val ext = if (looksLikeMd) "md" else "txt"
-                val mime = if (looksLikeMd) "text/markdown" else "text/plain"
+            if ((askedForJson || askedForPromptOrTxt) && text.length >= 600) {
+                val clean = text.replace(Regex("```(?:genui-[a-z-]+|cintra-suggestions)\\s*[\\s\\S]*?(?:```|$)"), "").trim()
+                val isJson = askedForJson || (clean.startsWith("{") && clean.endsWith("}")) || (clean.startsWith("[") && clean.endsWith("]"))
+                val ext = if (isJson) "json" else "txt"
+                val mime = if (isJson) "application/json" else "text/plain"
                 val stamp = System.currentTimeMillis() % 100000
                 return GeneratedGenericFile(
-                    title = if (askedForTextOrPrompt) "ملف ${ext.uppercase()} جاهز" else "نسخة نصية من الرد (${ext.uppercase()})",
+                    title = if (isJson) "ملف JSON جاهز" else "ملف برومبت / نص (.txt)",
                     fileName = "Cintra_${stamp}.$ext",
                     mimeType = mime,
                     content = clean,
-                    summary = "تم تجهيز النص تلقائياً كملف .$ext للتحميل والمشاركة",
+                    summary = "تم حفظ البرومبت/المحتوى تلقائياً بصيغة .$ext للتحميل",
                 )
             }
         }
         return null
+    }
+
+    private fun extractSuggestionsFromMarkdown(text: String): List<String> {
+        Regex("```cintra-suggestions\\s*([\\s\\S]*?)```").find(text)?.let { match ->
+            return runCatching {
+                val arr = JSONArray(match.groupValues[1].trim())
+                (0 until arr.length()).mapNotNull { i -> arr.optString(i).trim().takeIf { it.isNotEmpty() } }.take(3)
+            }.getOrDefault(emptyList())
+        }
+        return emptyList()
     }
 
     private fun extractPdfFromMarkdown(text: String): GeneratedPdfDoc? {

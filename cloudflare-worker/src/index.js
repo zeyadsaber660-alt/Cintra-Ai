@@ -26,12 +26,15 @@ const SMART_UI_DIRECTIVE = [
   "---HTML---",
   '<h2>1. العنوان</h2><p>الشرح المختصر والمنظم...</p><div class="box-green"><strong>قاعدة ذهبية:</strong> ...</div>',
   "```",
-  "- For image generation: ```genui-image\nEnglish prompt\n```.",
+  "- For image generation: ```genui-image\nDetailed English visual prompt\n```.",
+  "- In PDFs, NEVER put Arabic words inside .math blocks — keep Arabic outside .math so RTL/LTR never reverses.",
+  "- At the end of informative replies, optionally append 2-3 short Arabic follow-up suggestions inside ```cintra-suggestions\n[\"اقتراح 1\", \"اقتراح 2\"]\n```.",
   "- For other downloadable files: ```cintra-file\nTITLE: ...\nFILENAME: ...\nMIME: ...\nSUMMARY: ...\n---CONTENT---\n...\n```."
 ].join("\n");
 
 const DEFAULT_CONFIG = {
   searchApiKey: "",
+  imageApi: { baseUrl: "https://nexora-llm.onrender.com/v1", modelId: "auto", apiKey: "" },
   models: {
     "cintra-pro": {
       label: "Cintra Pro",
@@ -88,6 +91,7 @@ async function loadConfig(env) {
     const parsed = JSON.parse(raw);
     return {
       searchApiKey: parsed.searchApiKey || "",
+      imageApi: { ...DEFAULT_CONFIG.imageApi, ...(parsed.imageApi || {}) },
       models: { ...JSON.parse(JSON.stringify(DEFAULT_CONFIG.models)), ...(parsed.models || {}) }
     };
   } catch (_e) {
@@ -235,6 +239,7 @@ export default {
         models: maskedModels,
         hasSearchKey: Boolean(cfg.searchApiKey),
         searchKeyMasked: maskKey(cfg.searchApiKey),
+        imageApi: { baseUrl: cfg.imageApi?.baseUrl || "", modelId: cfg.imageApi?.modelId || "", hasKey: Boolean(cfg.imageApi?.apiKey), apiKeyMasked: maskKey(cfg.imageApi?.apiKey) },
         kvBound: Boolean(env.CINTRA_CONFIG)
       });
     }
@@ -248,6 +253,11 @@ export default {
         searchApiKey: incoming.searchApiKey && incoming.searchApiKey.trim() !== ""
           ? incoming.searchApiKey.trim()
           : existing.searchApiKey,
+        imageApi: {
+          baseUrl: (incoming.imageApi?.baseUrl || existing.imageApi?.baseUrl || "").trim().replace(/\/+$/, ""),
+          modelId: (incoming.imageApi?.modelId || existing.imageApi?.modelId || "auto").trim(),
+          apiKey: incoming.imageApi?.apiKey && incoming.imageApi.apiKey.trim() !== "" ? incoming.imageApi.apiKey.trim() : (existing.imageApi?.apiKey || "")
+        },
         models: { ...existing.models }
       };
 
@@ -300,6 +310,35 @@ export default {
         return jsonResponse({ ok: true, status: resp.status, latencyMs });
       } catch (e) {
         return jsonResponse({ ok: false, error: e.message || "Network error" }, 200);
+      }
+    }
+
+
+    // Custom Image Generation API proxy (uses user's configured Image API from Dashboard)
+    if (request.method === "POST" && url.pathname === "/v1/images/generate") {
+      if (!verifyAppToken(request, env)) return jsonResponse({ error: "Unauthorized" }, 401);
+      const { prompt } = await request.json();
+      const cfg = await loadConfig(env);
+      const imgCfg = cfg.imageApi || {};
+      const key = imgCfg.apiKey || cfg.models["cintra-pro"]?.apiKey || "";
+      const base = (imgCfg.baseUrl || cfg.models["cintra-pro"]?.baseUrl || "").replace(/\/+$/, "");
+      if (!base || !key) {
+        return jsonResponse({ error: "Image API not configured" }, 400);
+      }
+      try {
+        const resp = await fetch(`${base}/images/generations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+          body: JSON.stringify({ model: imgCfg.modelId || "auto", prompt, n: 1, size: "1024x1024" })
+        });
+        const data = await resp.json();
+        const first = data?.data?.[0] || {};
+        if (first.url || first.b64_json) {
+          return jsonResponse({ url: first.url || "", b64_json: first.b64_json || "" });
+        }
+        return jsonResponse({ error: data?.error?.message || "Image API returned empty data" }, 502);
+      } catch (e) {
+        return jsonResponse({ error: e.message || "Image generation failed" }, 502);
       }
     }
 

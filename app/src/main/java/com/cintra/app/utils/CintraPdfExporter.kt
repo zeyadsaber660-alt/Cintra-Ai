@@ -76,7 +76,7 @@ object CintraPdfExporter {
                 th { background: #0F172A; color: #FFFFFF; padding: 10px 12px; text-align: right; font-weight: 700; }
                 td { padding: 9px 12px; border-bottom: 1px solid #E2E8F0; }
                 tr:nth-child(even) td { background: #F8FAFC; }
-                .math { direction: ltr; unicode-bidi: isolate; font-family: Georgia, serif; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px 14px; border-radius: 10px; text-align: center; margin: 8px 0; font-size: 15px; }
+                .math { direction: ltr; unicode-bidi: plaintext; display: block; font-family: Georgia, serif; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px 14px; border-radius: 10px; text-align: center; margin: 8px 0; font-size: 15px; }
                 .box, blockquote { background: #F0F9FF; border-right: 4px solid $accentHex; padding: 12px 16px; border-radius: 10px; margin: 12px 0; }
                 .box-green { background: #ECFDF5; border-right: 4px solid #10B981; padding: 12px 16px; border-radius: 10px; margin: 12px 0; }
                 .box-amber { background: #FFFBEB; border-right: 4px solid #F59E0B; padding: 12px 16px; border-radius: 10px; margin: 12px 0; }
@@ -181,8 +181,34 @@ object CintraPdfExporter {
                         if (finished) return
                         finished = true
                         mainHandler.postDelayed({
+                            // Smart JS page-break protector: pushes any box/row/heading crossing a 1123px boundary cleanly to next page
+                            val paginateJs = """
+                                (function(){
+                                  var H = 1123, M = 34;
+                                  var els = document.querySelectorAll('h2,h3,p,tr,.box,.box-green,.box-amber,.math,blockquote,.card,div.rounded-xl,div.rounded-2xl');
+                                  for (var i = 0; i < els.length; i++) {
+                                    var el = els[i];
+                                    var r = el.getBoundingClientRect();
+                                    var h = r.height;
+                                    if (h <= 0 || h > H - M * 2) continue;
+                                    var top = r.top + window.scrollY;
+                                    var bottom = top + h;
+                                    var pageIdx = Math.floor(top / H);
+                                    var pageEnd = (pageIdx + 1) * H - M;
+                                    if (bottom > pageEnd) {
+                                      var push = ((pageIdx + 1) * H + M) - top;
+                                      var cur = parseFloat(getComputedStyle(el).marginTop) || 0;
+                                      el.style.marginTop = (cur + push) + 'px';
+                                    }
+                                  }
+                                  return Math.ceil(document.body.scrollHeight);
+                                })();
+                            """.trimIndent()
+                            webView.evaluateJavascript(paginateJs) { jsHeightStr ->
+                                mainHandler.postDelayed({
                             try {
-                                val rawContentHeight = webView.contentHeight.coerceAtLeast(pageHeightPx)
+                                val jsHeight = jsHeightStr?.trim('"')?.toDoubleOrNull()?.toInt() ?: 0
+                                val rawContentHeight = maxOf(webView.contentHeight, jsHeight, pageHeightPx)
                                 val measuredContentPx = rawContentHeight.coerceAtMost(pageHeightPx * 24)
 
                                 webView.measure(
@@ -244,7 +270,9 @@ object CintraPdfExporter {
                                 runCatching { webView.destroy() }
                                 onError(e.message ?: "تعذّر إنشاء ملف PDF")
                             }
-                        }, 1150L)
+                                }, 180L)
+                            }
+                        }, 1050L)
                     }
                 }
 

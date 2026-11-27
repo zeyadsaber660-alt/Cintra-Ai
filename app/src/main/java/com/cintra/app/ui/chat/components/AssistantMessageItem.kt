@@ -101,6 +101,7 @@ fun MessageItem(
     onToggleCheck: (Int) -> Unit,
     onEditUser: () -> Unit = {},
     onResendUser: () -> Unit = {},
+    onSuggestionClick: (String) -> Unit = {},
     fontScale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
@@ -125,6 +126,7 @@ fun MessageItem(
             onRegenerate = onRegenerate,
             onTab = onTab,
             onToggleCheck = onToggleCheck,
+            onSuggestionClick = onSuggestionClick,
             modifier = animatedMod,
         )
     }
@@ -214,6 +216,7 @@ private fun AssistantRow(
     onRegenerate: () -> Unit,
     onTab: (String) -> Unit,
     onToggleCheck: (Int) -> Unit,
+    onSuggestionClick: (String) -> Unit,
     fontScale: Float,
     modifier: Modifier,
 ) {
@@ -253,7 +256,7 @@ private fun AssistantRow(
         val isBuildingGenUi = message.isStreaming && message.content.contains("```genui-")
         val visibleContent = remember(message.content, message.isStreaming) {
             var cleaned = message.content
-            for (tag in listOf("```cintra-pdf", "```cintra-file", "```genui-")) {
+            for (tag in listOf("```cintra-pdf", "```cintra-file", "```cintra-suggestions", "```genui-")) {
                 if (cleaned.contains(tag)) cleaned = cleaned.substringBefore(tag)
             }
             // Hide an unclosed ```cintra-svg block while it is still streaming
@@ -328,6 +331,10 @@ private fun AssistantRow(
 
         if (!message.isStreaming && message.webSources.isNotEmpty()) {
             WebSourcesRow(sources = message.webSources)
+        }
+
+        if (!message.isStreaming && message.followUpSuggestions.isNotEmpty()) {
+            FollowUpSuggestionsRow(suggestions = message.followUpSuggestions, onClick = onSuggestionClick)
         }
 
         if (!message.isStreaming && message.genUi != null) {
@@ -526,7 +533,7 @@ private fun splitMarkdown(md: String): List<MdSegment> {
                 if (svgRaw.contains("<svg", ignoreCase = true)) {
                     segments.add(MdSegment.SvgSegment(svgRaw))
                 }
-            } else if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file") {
+            } else if (!lowerLang.startsWith("genui-") && lowerLang != "cintra-pdf" && lowerLang != "cintra-file" && lowerLang != "cintra-suggestions") {
                 segments.add(MdSegment.CodeSegment(lang, code.toString().trimEnd()))
             }
             i++
@@ -865,6 +872,38 @@ private fun CintraMarkdownTable(
 }
 
 
+
+
+@Composable
+private fun FollowUpSuggestionsRow(suggestions: List<String>, onClick: (String) -> Unit) {
+    val palette = CintraThemePalette
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        suggestions.forEach { suggestion ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(palette.surface)
+                    .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(14.dp))
+                    .clickable { onClick(suggestion) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = suggestion,
+                    color = palette.textPrimary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(CintraIcons.Sparkle, contentDescription = null, tint = palette.accent, modifier = Modifier.size(14.dp))
+            }
+        }
+    }
+}
 
 @Composable
 private fun WebSourcesRow(sources: List<com.cintra.app.ui.model.WebSourceItem>) {

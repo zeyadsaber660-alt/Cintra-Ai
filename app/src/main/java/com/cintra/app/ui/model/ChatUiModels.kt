@@ -91,6 +91,7 @@ data class ChatMessage(
     val webSources: List<WebSourceItem> = emptyList(),
     val generatedPdf: GeneratedPdfDoc? = null,
     val generatedFile: GeneratedGenericFile? = null,
+    val followUpSuggestions: List<String> = emptyList(),
 )
 
 data class ChatSession(
@@ -118,5 +119,6 @@ sealed interface AiStreamChunk {
         val genUi: GenUi?,
         val generatedPdf: GeneratedPdfDoc? = null,
         val generatedFile: GeneratedGenericFile? = null,
+        val suggestions: List<String> = emptyList(),
     ) : AiStreamChunk
 }

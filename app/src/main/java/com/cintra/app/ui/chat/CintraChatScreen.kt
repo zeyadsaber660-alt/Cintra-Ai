@@ -494,6 +494,7 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
                     onToggleCheck = { index -> viewModel.toggleChecklistItem(message.id, index) },
                     onEditUser = { viewModel.editUserMessage(message.id) },
                     onResendUser = { viewModel.resendUserMessage(message.id) },
+                    onSuggestionClick = { q -> viewModel.sendMessage(q) },
                     modifier = Modifier
                         .animateItem()
                         .widthIn(max = 780.dp)
