@@ -45,10 +45,9 @@ object CintraPdfExporter {
 
     private fun formatHtmlExponents(html: String): String {
         var s = html
-        // Convert f^(-1), 2^(n+1), x^{2} -> <sup>...</sup>
-        s = s.replace(Regex("([A-Za-z0-9)}\u0600-\u06FF])\^\(([^()]{1,12})\)"), "$1<sup>$2</sup>")
-        s = s.replace(Regex("([A-Za-z0-9)}\u0600-\u06FF])\^\{([^{}]{1,12})\}"), "$1<sup>$2</sup>")
-        s = s.replace(Regex("([A-Za-z0-9)}])\^(-?[A-Za-z0-9]{1,4})\b"), "$1<sup>$2</sup>")
+        s = s.replace(Regex("([A-Za-z0-9)}\u0600-\u06FF])\\^\\(([^()]{1,12})\\)"), "$1<sup>$2</sup>")
+        s = s.replace(Regex("([A-Za-z0-9)}\u0600-\u06FF])\\^\\{([^\\{\\}]{1,12})\\}"), "$1<sup>$2</sup>")
+        s = s.replace(Regex("([A-Za-z0-9)}])\\^(-?[A-Za-z0-9]{1,4})\\b"), "$1<sup>$2</sup>")
         return s
     }
 
