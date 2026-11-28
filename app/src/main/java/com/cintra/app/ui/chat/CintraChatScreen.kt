@@ -679,7 +679,11 @@ private fun CintraChatScreenContent(
 }
 
 @Composable
-private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel) {
+private fun ChatStream(
+    state: CintraChatUiState,
+    viewModel: CintraChatViewModel,
+    onPickFile: () -> Unit = {},
+) {
     val messages = state.messages
     val context = LocalContext.current
     val palette = CintraThemePalette
