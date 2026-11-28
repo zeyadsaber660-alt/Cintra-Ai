@@ -110,6 +110,21 @@ import com.cintra.app.ui.theme.CintraIcons
 import com.cintra.app.ui.theme.CintraPalette
 import com.cintra.app.ui.theme.CintraTheme
 import com.cintra.app.ui.theme.CintraThemePalette
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Slideshow
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.AttachFile
+import com.cintra.app.ui.theme.CintraToastManager
+import com.cintra.app.ui.theme.CintraGlassDialog
+import com.cintra.app.ui.theme.CintraFloatingMenuRow
+import com.cintra.app.ui.theme.CintraFloatingMenuDialog
 import com.cintra.app.ui.theme.CintraGlassToastHost
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -335,20 +350,139 @@ private fun CintraChatScreenContent(
                         },
                         label = "chatSwitch",
                     ) { _ ->
-                        ChatStream(state = state, viewModel = viewModel)
+                        ChatStream(state = state, viewModel = viewModel, onPickFile = { filePicker.launch(arrayOf("*/*")) })
                     }
                 }
+
+                var chatOptionsOpen by remember { mutableStateOf(false) }
+                var uploadedFilesOpen by remember { mutableStateOf(false) }
 
                 FloatingGlassTopBar(
                     backdrop = backdrop,
                     modelName = state.selectedModel.name,
-                    darkTheme = state.darkTheme,
+                    hasMessages = state.messages.isNotEmpty(),
+                    isTemporaryChat = state.isTemporaryChat,
                     onMenu = { scope.launch { drawerState.open() } },
                     onModel = viewModel::openModelPicker,
-                    onTheme = viewModel::toggleTheme,
                     onNewChat = viewModel::newChat,
+                    onToggleTemporary = {
+                        val turningOn = !state.isTemporaryChat
+                        viewModel.toggleTemporaryChat()
+                        CintraToastManager.show(
+                            if (turningOn) "تم تفعيل المحادثة المؤقتة (لن تُحفظ في السجل)" else "تم إيقاف المحادثة المؤقتة",
+                        )
+                    },
+                    onChatOptions = { chatOptionsOpen = true },
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
+
+                if (state.chatSearchOpen) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 60.dp, start = 16.dp, end = 16.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (palette.isDark) Color(0xF0161B26) else Color(0xF5FFFFFF))
+                            .border(0.85.dp, palette.borderSubtle, RoundedCornerShape(18.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Rounded.Search, contentDescription = null, tint = palette.accent, modifier = Modifier.size(18.dp))
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = state.chatSearchQuery,
+                            onValueChange = viewModel::onChatSearchChange,
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(color = palette.textPrimary, fontSize = 14.sp),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+                            modifier = Modifier.weight(1f),
+                            decorationBox = { inner ->
+                                if (state.chatSearchQuery.isEmpty()) {
+                                    Text("ابحث داخل المحادثة...", color = palette.textMuted, fontSize = 13.5.sp)
+                                }
+                                inner()
+                            },
+                        )
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "إغلاق البحث",
+                            tint = palette.textSecondary,
+                            modifier = Modifier.size(18.dp).clickable { viewModel.toggleChatSearch() },
+                        )
+                    }
+                }
+
+                if (chatOptionsOpen) {
+                    val isPinned = state.activeSessionId in state.pinnedSessionIds
+                    CintraFloatingMenuDialog(onDismiss = { chatOptionsOpen = false }) {
+                        CintraFloatingMenuRow(icon = Icons.Rounded.Share, label = "مشاركة المحادثة") {
+                            chatOptionsOpen = false
+                            val txt = viewModel.activeChatShareText()
+                            if (txt.isNotBlank()) {
+                                runCatching {
+                                    val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(android.content.Intent.EXTRA_TEXT, txt)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(shareIntent, "مشاركة المحادثة"))
+                                }
+                            }
+                        }
+                        CintraFloatingMenuRow(
+                            icon = Icons.Rounded.PushPin,
+                            label = if (isPinned) "إلغاء التثبيت" else "تثبيت المحادثة",
+                        ) {
+                            chatOptionsOpen = false
+                            viewModel.togglePinActiveChat()
+                            CintraToastManager.show(if (isPinned) "تم إلغاء تثبيت المحادثة" else "تم تثبيت المحادثة في الأعلى")
+                        }
+                        CintraFloatingMenuRow(icon = Icons.Rounded.AttachFile, label = "الملفات المرفقة") {
+                            chatOptionsOpen = false
+                            uploadedFilesOpen = true
+                        }
+                        CintraFloatingMenuRow(icon = Icons.Rounded.Search, label = "بحث في المحادثة") {
+                            chatOptionsOpen = false
+                            viewModel.toggleChatSearch()
+                        }
+                        CintraFloatingMenuRow(icon = Icons.Rounded.VisibilityOff, label = "محادثة مؤقتة") {
+                            chatOptionsOpen = false
+                            viewModel.toggleTemporaryChat()
+                            CintraToastManager.show("بدأت محادثة مؤقتة لن تُحفظ في السجل")
+                        }
+                        CintraFloatingMenuRow(icon = Icons.Rounded.DeleteOutline, label = "حذف المحادثة", destructive = true) {
+                            chatOptionsOpen = false
+                            viewModel.deleteActiveChat()
+                            CintraToastManager.show("تم حذف المحادثة")
+                        }
+                    }
+                }
+
+                if (uploadedFilesOpen) {
+                    val files = viewModel.activeChatAttachments()
+                    CintraGlassDialog(
+                        title = "الملفات المرفقة في المحادثة",
+                        subtitle = if (files.isEmpty()) "لا توجد ملفات مرفقة في هذه المحادثة بعد." else "عدد الملفات: ${files.size}",
+                        onDismiss = { uploadedFilesOpen = false },
+                    ) {
+                        files.forEach { f ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(palette.surface)
+                                    .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Icon(Icons.Rounded.AttachFile, contentDescription = null, tint = palette.accent, modifier = Modifier.size(16.dp))
+                                Text(f.name, color = palette.textPrimary, fontSize = 13.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                }
 
                 if (state.plusMenuOpen) {
                     Box(
@@ -566,7 +700,15 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
     }
 
     if (messages.isEmpty()) {
-        WelcomeView(isArabic = state.isArabic)
+        WelcomeView(
+            isArabic = state.isArabic,
+            isTemporaryChat = state.isTemporaryChat,
+            onQuickPrompt = { prompt, tool ->
+                if (tool != null && state.activeTool != tool) viewModel.toggleTool(tool)
+                viewModel.onComposerTextChange(prompt)
+            },
+            onPickFile = onPickFile,
+        )
         return
     }
 
@@ -646,44 +788,149 @@ private fun ChatStream(state: CintraChatUiState, viewModel: CintraChatViewModel)
 }
 
 @Composable
-private fun WelcomeView(isArabic: Boolean) {
+private fun WelcomeView(
+    isArabic: Boolean,
+    isTemporaryChat: Boolean,
+    onQuickPrompt: (String, ActiveTool?) -> Unit,
+    onPickFile: () -> Unit,
+) {
     val palette = CintraThemePalette
     Column(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 74.dp, bottom = 140.dp),
+            .padding(horizontal = 22.dp)
+            .padding(top = 74.dp, bottom = 130.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.cintra_logo),
-            contentDescription = "Cintra Logo",
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(22.dp)),
-        )
-        Spacer(Modifier.height(16.dp))
+        if (isTemporaryChat) {
+            Box(
+                modifier = Modifier
+                    .size(68.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color(0xFFF59E0B).copy(alpha = 0.14f))
+                    .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f), RoundedCornerShape(22.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.VisibilityOff,
+                    contentDescription = "محادثة مؤقتة",
+                    tint = Color(0xFFF59E0B),
+                    modifier = Modifier.size(30.dp),
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = if (isArabic) "محادثة مؤقتة" else "Temporary Chat",
+                color = palette.textPrimary,
+                fontSize = 23.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (isArabic) {
+                    "لن تظهر هذه المحادثة في السجل ولن تُحفظ على جهازك بعد إغلاقها."
+                } else {
+                    "This chat won't appear in history or be saved on your device."
+                },
+                color = palette.textSecondary,
+                fontSize = 13.5.sp,
+                lineHeight = 21.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 300.dp),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(76.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(1.dp, palette.accent.copy(alpha = 0.25f), RoundedCornerShape(24.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.cintra_logo),
+                    contentDescription = "Cintra Logo",
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(22.dp)),
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = if (isArabic) "بمَ أساعدك اليوم؟" else "What can I help with?",
+                color = palette.textPrimary,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(22.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                HomeQuickChip(
+                    icon = Icons.Rounded.AutoAwesome,
+                    tint = Color(0xFF10B981),
+                    label = if (isArabic) "إنشاء صورة" else "Create image",
+                    modifier = Modifier.weight(1f),
+                ) { onQuickPrompt(if (isArabic) "صمم لي صورة " else "Create an image of ", ActiveTool.IMAGE) }
+                HomeQuickChip(
+                    icon = Icons.Rounded.Description,
+                    tint = Color(0xFF0EA5E9),
+                    label = if (isArabic) "شرح ملف PDF" else "Explain a file",
+                    modifier = Modifier.weight(1f),
+                ) { onPickFile() }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                HomeQuickChip(
+                    icon = Icons.Rounded.Slideshow,
+                    tint = Color(0xFFF59E0B),
+                    label = if (isArabic) "عرض باوربوينت" else "Make PowerPoint",
+                    modifier = Modifier.weight(1f),
+                ) { onQuickPrompt(if (isArabic) "اعمل لي عرض تقديمي باوربوينت عن " else "Create a PowerPoint presentation about ", null) }
+                HomeQuickChip(
+                    icon = Icons.Rounded.Language,
+                    tint = Color(0xFF6366F1),
+                    label = if (isArabic) "بحث في الويب" else "Search the web",
+                    modifier = Modifier.weight(1f),
+                ) { onQuickPrompt(if (isArabic) "ابحث لي في الويب عن " else "Search the web for ", ActiveTool.WEB) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeQuickChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val palette = CintraThemePalette
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(palette.surface.copy(alpha = 0.85f))
+            .border(0.85.dp, palette.borderSubtle, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
         Text(
-            text = if (isArabic) "بمَ أساعدك اليوم؟" else "What can I help with?",
+            text = label,
             color = palette.textPrimary,
-            fontSize = 23.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = if (isArabic) {
-                "اكتب سؤالك أو اضغط + لإضافة صور وملفات أو استخدم التحدث المباشر."
-            } else {
-                "Type your question, tap + for photos & files, or start Cintra Live."
-            },
-            color = palette.textSecondary,
-            fontSize = 13.5.sp,
-            lineHeight = 21.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = 320.dp),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
         )
     }
 }

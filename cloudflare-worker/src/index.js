@@ -570,6 +570,41 @@ export default {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/api/admin/test-image") {
+      if (!verifyAdmin(request, env)) return jsonResponse({ error: "كلمة مرور الإدارة غير صحيحة" }, 401);
+      const cfg = await loadConfig(env);
+      const imgCfg = cfg.imageApi || {};
+      const key = imgCfg.apiKey || cfg.models["cintra-pro"]?.apiKey || "";
+      const base = (imgCfg.baseUrl || cfg.models["cintra-pro"]?.baseUrl || "").replace(/\/+$/, "");
+      if (!base || !key) {
+        return jsonResponse({ ok: false, error: "لم يتم ضبط رابط أو مفتاح محرك الصور بعد" }, 200);
+      }
+      const start = Date.now();
+      try {
+        const resp = await fetch(base + "/images/generations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+          body: JSON.stringify({ model: imgCfg.modelId || "auto", prompt: "Minimal glowing blue glass sphere on dark background", n: 1, size: "512x512" })
+        });
+        const latencyMs = Date.now() - start;
+        const data = await resp.json().catch(() => ({}));
+        const first = data?.data?.[0] || {};
+        const directUrl = first.url || data?.url || "";
+        const directB64 = first.b64_json || data?.b64_json || "";
+        if (directUrl || directB64) {
+          return jsonResponse({ ok: true, status: resp.status, latencyMs, url: directUrl, b64_json: directB64 });
+        }
+        return jsonResponse({
+          ok: false,
+          status: resp.status,
+          latencyMs,
+          error: data?.error?.message || ("HTTP " + resp.status)
+        }, 200);
+      } catch (e) {
+        return jsonResponse({ ok: false, latencyMs: Date.now() - start, error: e.message || "Network error" }, 200);
+      }
+    }
+
     if (request.method === "POST" && url.pathname === "/v1/images/generate") {
       if (!verifyAppToken(request, env)) return jsonResponse({ error: "Unauthorized" }, 401);
       const { prompt } = await request.json();
@@ -880,11 +915,16 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
       <div class="page" id="page-media">
         <div class="card">
-          <h3 style="margin:0 0 8px;">محرك توليد الصور الخاص بك (Image API)</h3>
+          <div class="row" style="margin-bottom:8px;">
+            <h3 style="margin:0;">محرك توليد الصور الخاص بك (Image API)</h3>
+            <button class="btn btn-soft" style="padding:6px 12px;font-size:12px;" id="testImageBtn">اختبار الصور</button>
+          </div>
           <p style="margin:0 0 12px;color:var(--muted);font-size:12.5px;">يربط ميزة توليد الصور داخل التطبيق مباشرة بـ API منصتك (/images/generations).</p>
           <div class="field"><label>Image Base URL</label><input id="imgBaseUrl" dir="ltr" placeholder="https://nexora-llm.onrender.com/v1" /></div>
           <div class="field"><label>Image Model ID</label><input id="imgModelId" dir="ltr" placeholder="auto" /></div>
           <div class="field"><label>Image API Key (اتركه فارغاً لاستخدام مفتاح Cintra Pro)</label><input id="imgApiKey" type="password" dir="ltr" placeholder="sk-..." /></div>
+          <div id="imgTestRes" style="font-size:12px;margin-top:8px;"></div>
+          <img id="imgTestPreview" style="display:none;margin-top:10px;max-width:160px;border-radius:12px;border:1px solid var(--border);" alt="preview" />
         </div>
         <div class="card">
           <div class="row" style="margin-bottom:8px;">
@@ -1028,6 +1068,27 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
         out.textContent = d.ok ? ('✓ ناجح (' + d.latencyMs + 'ms)') : ('✗ فشل: ' + (d.error || d.status));
       }
     });
+
+    document.getElementById('testImageBtn').onclick = async function() {
+      var out = document.getElementById('imgTestRes');
+      var prev = document.getElementById('imgTestPreview');
+      prev.style.display = 'none';
+      out.style.color = 'var(--accent)';
+      out.textContent = 'جارٍ اختبار توليد صورة...';
+      var r = await fetch('/api/admin/test-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': adminSecret }
+      });
+      var d = await r.json();
+      out.style.color = d.ok ? 'var(--ok)' : 'var(--err)';
+      if (d.ok) {
+        out.textContent = '✓ ناجح (' + d.latencyMs + 'ms)';
+        prev.src = d.url || ('data:image/png;base64,' + d.b64_json);
+        prev.style.display = 'block';
+      } else {
+        out.textContent = '✗ فشل (' + (d.latencyMs || 0) + 'ms): ' + (d.error || d.status);
+      }
+    };
 
     document.getElementById('testSearchBtn').onclick = async function() {
       var out = document.getElementById('searchTestRes');

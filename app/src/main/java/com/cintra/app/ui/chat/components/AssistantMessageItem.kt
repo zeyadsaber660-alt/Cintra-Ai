@@ -79,6 +79,14 @@ import com.cintra.app.ui.model.AttachmentType
 import com.cintra.app.ui.model.ChatMessage
 import com.cintra.app.ui.theme.CintraIcons
 import com.cintra.app.ui.theme.CintraThemePalette
+import com.cintra.app.ui.theme.CintraFloatingMenuDialog
+import com.cintra.app.ui.theme.CintraFloatingMenuRow
+import com.cintra.app.ui.theme.CintraGlassDialog
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Subject
+import androidx.compose.ui.platform.LocalContext
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 
@@ -187,23 +195,63 @@ private fun UserBubble(
                 }
             }
 
-            DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false },
-                containerColor = palette.surface,
-            ) {
-                DropdownMenuItem(
-                    text = { Text("تعديل وإعادة إرسال", color = palette.textPrimary, fontSize = 13.5.sp) },
-                    onClick = { menuExpanded = false; onEdit() },
-                )
-                DropdownMenuItem(
-                    text = { Text("إعادة الإرسال", color = palette.textPrimary, fontSize = 13.5.sp) },
-                    onClick = { menuExpanded = false; onResend() },
-                )
-                DropdownMenuItem(
-                    text = { Text("نسخ الرسالة", color = palette.textPrimary, fontSize = 13.5.sp) },
-                    onClick = { menuExpanded = false; onCopy(message.content) },
-                )
+            var selectTextOpen by remember { mutableStateOf(false) }
+            val ctx = LocalContext.current
+            if (menuExpanded) {
+                val timeLabel = remember {
+                    java.text.SimpleDateFormat("اليوم، h:mm a", java.util.Locale("ar")).format(java.util.Date())
+                }
+                CintraFloatingMenuDialog(
+                    onDismiss = { menuExpanded = false },
+                    headerText = timeLabel,
+                ) {
+                    CintraFloatingMenuRow(icon = Icons.Rounded.ContentCopy, label = "نسخ") {
+                        menuExpanded = false
+                        onCopy(message.content)
+                    }
+                    CintraFloatingMenuRow(icon = Icons.Rounded.Subject, label = "تحديد النص") {
+                        menuExpanded = false
+                        selectTextOpen = true
+                    }
+                    CintraFloatingMenuRow(icon = Icons.Rounded.Edit, label = "تعديل الرسالة") {
+                        menuExpanded = false
+                        onEdit()
+                    }
+                    CintraFloatingMenuRow(icon = Icons.Rounded.Refresh, label = "إعادة الإرسال") {
+                        menuExpanded = false
+                        onResend()
+                    }
+                    CintraFloatingMenuRow(icon = Icons.Rounded.Share, label = "مشاركة الرسالة") {
+                        menuExpanded = false
+                        runCatching {
+                            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT, message.content)
+                            }
+                            ctx.startActivity(android.content.Intent.createChooser(shareIntent, "مشاركة الرسالة"))
+                        }
+                    }
+                }
+            }
+            if (selectTextOpen) {
+                CintraGlassDialog(
+                    title = "تحديد النص",
+                    onDismiss = { selectTextOpen = false },
+                    confirmLabel = "نسخ الكل",
+                    onConfirm = {
+                        selectTextOpen = false
+                        onCopy(message.content)
+                    },
+                ) {
+                    SelectionContainer {
+                        Text(
+                            text = message.content,
+                            color = palette.textPrimary,
+                            fontSize = 14.5.sp,
+                            lineHeight = 23.sp,
+                        )
+                    }
+                }
             }
         }
     }
@@ -1538,10 +1586,12 @@ function __stripIncomplete(raw, isFinal){
   var s = raw || '';
   if(!isFinal){
     // Hide unclosed <script> or <style> blocks while streaming
-    var scIdx = s.lastIndexOf('<script');
-    if(scIdx >= 0 && s.indexOf('</script>', scIdx) < 0) s = s.slice(0, scIdx);
-    var stIdx = s.lastIndexOf('<style');
-    if(stIdx >= 0 && s.indexOf('</style>', stIdx) < 0) s = s.slice(0, stIdx);
+    var endSc = '<' + '/script>';
+    var endSt = '<' + '/style>';
+    var scIdx = s.lastIndexOf('<' + 'script');
+    if(scIdx >= 0 && s.indexOf(endSc, scIdx) < 0) s = s.slice(0, scIdx);
+    var stIdx = s.lastIndexOf('<' + 'style');
+    if(stIdx >= 0 && s.indexOf(endSt, stIdx) < 0) s = s.slice(0, stIdx);
     // Strip trailing partial <tag...
     var lt = s.lastIndexOf('<');
     var gt = s.lastIndexOf('>');

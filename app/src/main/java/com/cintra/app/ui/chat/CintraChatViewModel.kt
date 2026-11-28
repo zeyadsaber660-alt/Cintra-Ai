@@ -70,6 +70,10 @@ data class CintraChatUiState(
     val artifactTitle: String = "",
     val artifactCode: String = "",
     val toast: String? = null,
+    val isTemporaryChat: Boolean = false,
+    val pinnedSessionIds: Set<String> = emptySet(),
+    val chatSearchOpen: Boolean = false,
+    val chatSearchQuery: String = "",
 ) {
     val activeSession: ChatSession?
         get() = sessions.firstOrNull { it.id == activeSessionId }
@@ -160,7 +164,8 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
     private fun persistSessions() {
         runCatching {
             val arr = JSONArray()
-            _state.value.sessions.take(40).forEach { s ->
+            val tempId = if (_state.value.isTemporaryChat) _state.value.activeSessionId else null
+            _state.value.sessions.filter { it.id != tempId }.take(40).forEach { s ->
                 val sObj = JSONObject()
                 sObj.put("id", s.id)
                 sObj.put("title", s.title)
@@ -760,9 +765,27 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
                         if (sessionJobs.values.none { it.isActive }) {
                             CintraBackgroundService.stop(getApplication())
                         }
-                        val doneTitle = if (chunk.generatedPdf != null) "ملف PDF جاهز في Cintra AI" else "اكتمل رد Cintra AI"
-                        val doneBody = chunk.generatedPdf?.title ?: "اضغط للعودة وعرض الإجابة كاملة"
-                        CintraBackgroundService.notifyDone(getApplication(), doneTitle, doneBody)
+                        if (!com.cintra.app.CintraAppState.isInForeground) {
+                            val doneTitle = when {
+                                chunk.generatedPptx != null -> "عرض PowerPoint جاهز في Cintra AI"
+                                chunk.generatedPdf != null -> "ملف PDF جاهز في Cintra AI"
+                                chunk.generatedDocx != null -> "مستند Word جاهز في Cintra AI"
+                                else -> "اكتمل رد Cintra AI"
+                            }
+                            val replySnippet = _state.value.sessions
+                                .firstOrNull { it.id == sessionId }
+                                ?.messages?.firstOrNull { it.id == assistantId }
+                                ?.content.orEmpty()
+                                .replace(Regex("```[\\s\\S]*?(?:```|$)"), "")
+                                .replace(Regex("<[^>]+>"), " ")
+                                .replace(Regex("\\s+"), " ")
+                                .trim()
+                            val doneBody = chunk.generatedPptx?.title
+                                ?: chunk.generatedPdf?.title
+                                ?: chunk.generatedDocx?.title
+                                ?: replySnippet.take(90).ifBlank { "اضغط للعودة وعرض الإجابة كاملة" }
+                            CintraBackgroundService.notifyDone(getApplication(), doneTitle, doneBody)
+                        }
                     }
                 }
             }
@@ -828,4 +851,87 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
         super.onCleared()
         CintraBackgroundService.stop(getApplication())
     }
+
+    fun toggleTemporaryChat() {
+        val current = _state.value
+        val nextTemp = !current.isTemporaryChat
+        if (nextTemp && current.messages.isNotEmpty()) {
+            val fresh = ChatSession(id = "temp_${System.currentTimeMillis()}", title = "محادثة مؤقتة")
+            _state.update {
+                it.copy(
+                    sessions = listOf(fresh) + it.sessions,
+                    activeSessionId = fresh.id,
+                    isTemporaryChat = true,
+                    chatSearchOpen = false,
+                    chatSearchQuery = "",
+                )
+            }
+        } else {
+            _state.update { it.copy(isTemporaryChat = nextTemp) }
+        }
+    }
+
+    fun togglePinActiveChat() {
+        val id = _state.value.activeSessionId
+        _state.update { s ->
+            val next = if (id in s.pinnedSessionIds) s.pinnedSessionIds - id else s.pinnedSessionIds + id
+            val sorted = s.sessions.sortedByDescending { it.id in next }
+            s.copy(pinnedSessionIds = next, sessions = sorted)
+        }
+    }
+
+    fun deleteActiveChat() {
+        val id = _state.value.activeSessionId
+        sessionJobs.remove(id)?.cancel()
+        val remaining = _state.value.sessions.filterNot { it.id == id }
+        if (remaining.isEmpty()) {
+            val fresh = ChatSession(id = "s_${System.currentTimeMillis()}", title = "محادثة جديدة")
+            _state.update {
+                it.copy(
+                    sessions = listOf(fresh),
+                    activeSessionId = fresh.id,
+                    isTemporaryChat = false,
+                    chatSearchOpen = false,
+                    chatSearchQuery = "",
+                )
+            }
+        } else {
+            _state.update {
+                it.copy(
+                    sessions = remaining,
+                    activeSessionId = remaining.first().id,
+                    isTemporaryChat = false,
+                    chatSearchOpen = false,
+                    chatSearchQuery = "",
+                )
+            }
+        }
+        persistSessions()
+    }
+
+    fun toggleChatSearch() {
+        _state.update {
+            it.copy(
+                chatSearchOpen = !it.chatSearchOpen,
+                chatSearchQuery = if (it.chatSearchOpen) "" else it.chatSearchQuery,
+            )
+        }
+    }
+
+    fun onChatSearchChange(q: String) {
+        _state.update { it.copy(chatSearchQuery = q) }
+    }
+
+    fun activeChatShareText(): String {
+        val msgs = _state.value.messages
+        return msgs.joinToString("\n\n") { m ->
+            val who = if (m.isUser) "أنت" else (m.modelName ?: "Cintra")
+            val body = m.content.replace(Regex("```[a-zA-Z0-9_-]*\\n([\\s\\S]*?)```"), "$1")
+                .replace(Regex("<[^>]+>"), " ").replace(Regex("\\s{2,}"), " ").trim()
+            "$who:\n$body"
+        }
+    }
+
+    fun activeChatAttachments(): List<Attachment> =
+        _state.value.messages.flatMap { it.attachments }
 }

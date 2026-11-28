@@ -1,6 +1,7 @@
 package com.cintra.app.ui.chat.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,18 +36,21 @@ import com.cintra.app.ui.theme.cintraLiquidGlass
 import com.kyant.backdrop.Backdrop
 
 /**
- * Floating 3-zone Frosted Liquid Glass top bar with refined stroke icons
- * and unified GroupedGlassCapsule for adjacent actions.
+ * Floating 3-zone Frosted Liquid Glass top bar (v26):
+ * - Theme toggle moved strictly to Settings.
+ * - End capsule shows [New Chat | Temporary Chat] on Home, or [New Chat | Chat Options ⋮] inside an active chat.
  */
 @Composable
 fun FloatingGlassTopBar(
     backdrop: Backdrop,
     modelName: String,
-    darkTheme: Boolean,
+    hasMessages: Boolean,
+    isTemporaryChat: Boolean,
     onMenu: () -> Unit,
     onModel: () -> Unit,
-    onTheme: () -> Unit,
     onNewChat: () -> Unit,
+    onToggleTemporary: () -> Unit,
+    onChatOptions: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = CintraThemePalette
@@ -79,7 +86,7 @@ fun FloatingGlassTopBar(
             )
         }
 
-        // Center: Cintra Model Selector Pill
+        // Center: Cintra Model Selector Pill (or Temporary indicator)
         val pillShape = RoundedCornerShape(999.dp)
         Row(
             modifier = Modifier
@@ -95,12 +102,12 @@ fun FloatingGlassTopBar(
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(palette.accent),
+                    .background(if (isTemporaryChat) Color(0xFFF59E0B) else palette.accent),
             )
             Text(
-                text = modelName,
+                text = if (isTemporaryChat) "$modelName • مؤقتة" else modelName,
                 color = palette.textPrimary,
-                fontSize = 14.sp,
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -113,7 +120,7 @@ fun FloatingGlassTopBar(
             )
         }
 
-        // End: Unified Grouped Capsule [New Chat | Theme Switch]
+        // End: Unified Grouped Capsule [New Chat | Temp Chat or Chat Options ⋮]
         GroupedGlassCapsule(
             backdrop = backdrop,
             modifier = Modifier.align(Alignment.CenterEnd),
@@ -143,19 +150,42 @@ fun FloatingGlassTopBar(
                     .background(palette.borderSubtle),
             )
 
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onTheme),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (darkTheme) CintraIcons.Sun else CintraIcons.Moon,
-                    contentDescription = if (darkTheme) "الوضع النهاري" else "الوضع الليلي",
-                    tint = palette.textPrimary,
-                    modifier = Modifier.size(18.dp),
-                )
+            if (hasMessages) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onChatOptions),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = "خيارات المحادثة",
+                        tint = palette.textPrimary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(if (isTemporaryChat) palette.accent.copy(alpha = 0.16f) else Color.Transparent)
+                        .border(
+                            width = if (isTemporaryChat) 1.dp else 0.dp,
+                            color = if (isTemporaryChat) palette.accent.copy(alpha = 0.45f) else Color.Transparent,
+                            shape = CircleShape,
+                        )
+                        .clickable(onClick = onToggleTemporary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.VisibilityOff,
+                        contentDescription = "محادثة مؤقتة",
+                        tint = if (isTemporaryChat) palette.accent else palette.textPrimary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
     }

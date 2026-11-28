@@ -30,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -214,5 +216,77 @@ fun CintraGlassDialog(
                 }
             }
         }
+    }
+}
+
+
+/**
+ * ChatGPT-style 24dp rounded floating popup menu (matches 8516.png & 8517.png).
+ */
+@Composable
+fun CintraFloatingMenuDialog(
+    onDismiss: () -> Unit,
+    headerText: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val palette = CintraThemePalette
+    val shape = RoundedCornerShape(24.dp)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(min = 230.dp, max = 290.dp)
+                .shadow(24.dp, shape, spotColor = Color.Black.copy(alpha = 0.28f))
+                .clip(shape)
+                .background(if (palette.isDark) Color(0xF5181D28) else Color(0xFCFFFFFF))
+                .border(0.85.dp, palette.borderSubtle, shape)
+                .padding(vertical = 10.dp),
+        ) {
+            if (!headerText.isNullOrBlank()) {
+                Text(
+                    text = headerText,
+                    color = palette.textMuted,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+fun CintraFloatingMenuRow(
+    icon: ImageVector,
+    label: String,
+    destructive: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val palette = CintraThemePalette
+    val fg = if (destructive) Color(0xFFEF4444) else palette.textPrimary
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = fg,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = label,
+            color = fg,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
