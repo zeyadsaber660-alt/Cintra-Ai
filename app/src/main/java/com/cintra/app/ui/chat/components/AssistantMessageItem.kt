@@ -255,8 +255,20 @@ private fun AssistantRow(
             RealWebPhotosCarousel(photos = message.webPhotos)
         }
 
-        val isBuildingPdf = message.isStreaming && (message.content.contains("```cintra-pdf") || message.content.contains("```cintra-file"))
+        val isBuildingPdf = message.isStreaming && (
+            message.content.contains("```cintra-pdf") ||
+                message.content.contains("```cintra-file") ||
+                message.content.contains("```cintra-pptx") ||
+                message.content.contains("```cintra-docx")
+            )
+        val buildingLabel = when {
+            message.content.contains("```cintra-pptx") -> "جارٍ تصميم وتجهيز العرض التقديمي (PowerPoint)..."
+            message.content.contains("```cintra-docx") -> "جارٍ تجهيز مستند Word..."
+            message.content.contains("```cintra-file") -> "جارٍ تجهيز الملف للتحميل..."
+            else -> "جارٍ تصميم وتجهيز ملف الـ PDF للتحميل..."
+        }
         val isBuildingGenUi = message.isStreaming && message.content.contains("```genui-")
+        val hasLiveUiBlock = message.content.contains("```cintra-ui")
         val visibleContent = remember(message.content, message.isStreaming) {
             var cleaned = message.content
             for (tag in listOf("```cintra-pdf", "```cintra-file", "```cintra-pptx", "```cintra-docx", "```cintra-suggestions", "```genui-")) {
@@ -278,6 +290,34 @@ private fun AssistantRow(
 
         if (message.isStreaming && visibleContent.isEmpty() && !isBuildingPdf) {
             CintraWaitingLoader(statusText = message.liveStatus ?: "جارٍ التحضير...")
+        } else if (message.isStreaming && hasLiveUiBlock) {
+            // Invisible Live-Streaming HTML/CSS/JS UI mode: renders live output with typing animation, zero code visible!
+            val liveHtml = remember(visibleContent) {
+                val startIdx = visibleContent.indexOf("```cintra-ui")
+                if (startIdx >= 0) {
+                    val afterFence = visibleContent.substring(startIdx + 12).removePrefix("\r").removePrefix("\n")
+                    val endIdx = afterFence.indexOf("```")
+                    if (endIdx >= 0) afterFence.substring(0, endIdx) else afterFence
+                } else ""
+            }
+            val beforeUi = remember(visibleContent) {
+                val startIdx = visibleContent.indexOf("```cintra-ui")
+                if (startIdx > 0) visibleContent.substring(0, startIdx).trim() else ""
+            }
+            if (beforeUi.isNotBlank()) {
+                MarkdownBody(
+                    content = beforeUi,
+                    streaming = false,
+                    fontScale = fontScale,
+                    onCopy = onCopy,
+                    onOpenArtifacts = onOpenArtifacts,
+                )
+            }
+            CintraLiveUiView(
+                rawHtmlFragment = liveHtml,
+                isStreaming = true,
+                fontScale = fontScale,
+            )
         } else if (visibleContent.isNotEmpty()) {
             if (message.isStreaming) {
                 val splitIdx = visibleContent.lastIndexOf("\n\n")
@@ -327,7 +367,7 @@ private fun AssistantRow(
         }
 
         if (isBuildingPdf) {
-            CintraPdfBuildingPill()
+            CintraPdfBuildingPill(label = buildingLabel)
         }
 
         if (!message.isStreaming && message.generatedPdf != null) {
@@ -468,6 +508,7 @@ private sealed interface MdSegment {
     data class MermaidSegment(val code: String) : MdSegment
     data class ChartSegment(val configJson: String) : MdSegment
     data class QuizSegment(val json: String) : MdSegment
+    data class LiveUiSegment(val html: String) : MdSegment
 }
 
 
@@ -558,6 +599,9 @@ private fun splitMarkdown(md: String): List<MdSegment> {
                 if (svgRaw.contains("<svg", ignoreCase = true)) {
                     segments.add(MdSegment.SvgSegment(svgRaw))
                 }
+            } else if (lowerLang == "cintra-ui") {
+                val uiHtml = code.toString().trim()
+                if (uiHtml.isNotBlank()) segments.add(MdSegment.LiveUiSegment(uiHtml))
             } else if (lowerLang == "cintra-widget") {
                 val widgetHtml = code.toString().trim()
                 if (widgetHtml.isNotBlank()) segments.add(MdSegment.WidgetSegment(widgetHtml))
@@ -684,6 +728,8 @@ private fun MarkdownBody(
                     CintraChartCard(segment.configJson)
                 is MdSegment.QuizSegment ->
                     CintraInteractiveQuizCard(segment.json)
+                is MdSegment.LiveUiSegment ->
+                    CintraLiveUiView(rawHtmlFragment = segment.html, isStreaming = false, fontScale = fontScale)
             }
         }
         if (streaming) StreamingCursor()
@@ -725,7 +771,7 @@ private fun CintraDisplayMathCard(expr: String, fontScale: Float) {
 private class CintraHeightBridge(private val onHeight: (Int) -> Unit) {
     @JavascriptInterface
     fun reportHeight(px: Int) {
-        if (px in 80..1200) onHeight(px)
+        if (px in 28..2400) onHeight(px)
     }
 }
 
@@ -1223,7 +1269,7 @@ private fun WebSourcesRow(sources: List<com.cintra.app.ui.model.WebSourceItem>) 
 }
 
 @Composable
-private fun CintraPdfBuildingPill() {
+private fun CintraPdfBuildingPill(label: String = "جارٍ تصميم وتجهيز ملف الـ PDF للتحميل...") {
     val palette = CintraThemePalette
     val transition = rememberInfiniteTransition(label = "pdfBuild")
     val alpha by transition.animateFloat(0.35f, 1f, infiniteRepeatable(tween(550), RepeatMode.Reverse), label = "pdfAlpha")
@@ -1243,7 +1289,7 @@ private fun CintraPdfBuildingPill() {
             modifier = Modifier.size(18.dp),
         )
         Text(
-            text = "جارٍ تصميم وتجهيز ملف الـ PDF للتحميل...",
+            text = label,
             color = palette.textPrimary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
@@ -1430,4 +1476,153 @@ private fun highlightKotlin(code: String): AnnotatedString = buildAnnotatedStrin
         last = match.range.last + 1
     }
     append(code, last, code.length)
+}
+
+/**
+ * Seamless, Invisible Live-Streaming HTML/CSS/JS Renderer (Cintra v25).
+ * - Transparent background, zero borders, zero zoom/context menus -> looks 100% native in chat.
+ * - Pre-loads Cairo font, RTL/LTR auto direction, dark/light contrast variables, and typing reveal animation
+ *   so the LLM emits ONLY compact inner fragments (saving 75-85% tokens).
+ * - Safe-DOM streaming: buffers incomplete <tags>/<style>/<script> silently so zero raw code EVER flashes.
+ */
+@Composable
+private fun CintraLiveUiView(
+    rawHtmlFragment: String,
+    isStreaming: Boolean,
+    fontScale: Float,
+) {
+    val palette = CintraThemePalette
+    var heightDp by remember { mutableStateOf(48) }
+    val fgHex = if (palette.isDark) "#F1F5F9" else "#0F172A"
+    val mutedHex = if (palette.isDark) "#94A3B8" else "#64748B"
+    val surfaceHex = if (palette.isDark) "rgba(255,255,255,0.06)" else "rgba(15,23,42,0.04)"
+    val borderHex = if (palette.isDark) "rgba(255,255,255,0.11)" else "rgba(15,23,42,0.10)"
+    val baseFontPx = (15.5f * fontScale).toInt()
+
+    val shellHtml = remember(palette.isDark, baseFontPx) {
+        """<!DOCTYPE html>
+<html dir="auto" lang="ar">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root{--fg:$fgHex;--muted:$mutedHex;--surface:$surfaceHex;--border:$borderHex;--accent:#0EA5E9;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:transparent!important;color:var(--fg);font-family:'Cairo',system-ui,-apple-system,sans-serif;font-size:${baseFontPx}px;line-height:1.75;overflow-x:hidden;overflow-y:hidden;word-wrap:break-word;}
+#root{width:100%;padding:2px 0;}
+#root>*{animation:cintraTypeIn 0.24s ease-out both;}
+@keyframes cintraTypeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+.cintra-cursor{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--accent);margin-inline-start:6px;vertical-align:middle;animation:cPulse 0.7s infinite alternate;}
+@keyframes cPulse{from{opacity:.25;transform:scale(.85);}to{opacity:1;transform:scale(1.1);}}
+a{color:var(--accent);text-decoration:none;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin:8px 0;font-size:0.92em;}
+th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:start;}
+button{font-family:inherit;cursor:pointer;}
+</style>
+</head>
+<body oncontextmenu="return false;">
+<div id="root"></div>
+<script>
+window.__scriptsRan = false;
+function __reportH(){
+  try{
+    var h = Math.ceil(document.getElementById('root').getBoundingClientRect().height + 10);
+    if(window.CintraBridge && h > 16) window.CintraBridge.reportHeight(Math.min(1800, Math.max(32, h)));
+  }catch(e){}
+}
+if(typeof ResizeObserver !== 'undefined'){
+  new ResizeObserver(__reportH).observe(document.getElementById('root'));
+}
+function __stripIncomplete(raw, isFinal){
+  var s = raw || '';
+  if(!isFinal){
+    // Hide unclosed <script> or <style> blocks while streaming
+    var scIdx = s.lastIndexOf('<script');
+    if(scIdx >= 0 && s.indexOf('</script>', scIdx) < 0) s = s.slice(0, scIdx);
+    var stIdx = s.lastIndexOf('<style');
+    if(stIdx >= 0 && s.indexOf('</style>', stIdx) < 0) s = s.slice(0, stIdx);
+    // Strip trailing partial <tag...
+    var lt = s.lastIndexOf('<');
+    var gt = s.lastIndexOf('>');
+    if(lt > gt) s = s.slice(0, lt);
+  }
+  return s;
+}
+window.__cintraUpdate = function(b64, isFinal){
+  try{
+    var bytes = Uint8Array.from(atob(b64), function(c){ return c.charCodeAt(0); });
+    var raw = new TextDecoder('utf-8').decode(bytes);
+    var safe = __stripIncomplete(raw, isFinal);
+    var root = document.getElementById('root');
+    if(!isFinal){
+      root.innerHTML = safe + '<span class="cintra-cursor"></span>';
+    } else {
+      root.innerHTML = safe;
+      if(!window.__scriptsRan){
+        window.__scriptsRan = true;
+        var scripts = root.querySelectorAll('script');
+        scripts.forEach(function(oldS){
+          try{
+            var ns = document.createElement('script');
+            ns.textContent = oldS.textContent;
+            document.body.appendChild(ns);
+          }catch(e){}
+        });
+      }
+    }
+    __reportH();
+    setTimeout(__reportH, 120);
+  }catch(e){}
+};
+</script>
+</body>
+</html>"""
+    }
+
+    val payloadB64 = remember(rawHtmlFragment) {
+        android.util.Base64.encodeToString(rawHtmlFragment.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(heightDp.dp),
+    ) {
+        AndroidView(
+            modifier = Modifier.fillMaxWidth().height(heightDp.dp),
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    setBackgroundColor(AndroidColor.TRANSPARENT)
+                    setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    isLongClickable = false
+                    setOnLongClickListener { true }
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.setSupportZoom(false)
+                    settings.builtInZoomControls = false
+                    settings.displayZoomControls = false
+                    addJavascriptInterface(
+                        CintraHeightBridge { px -> post { heightDp = px.coerceIn(36, 1600) } },
+                        "CintraBridge",
+                    )
+                    webViewClient = object : android.webkit.WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            view?.tag = "READY"
+                            view?.evaluateJavascript("window.__cintraUpdate('$payloadB64', ${!isStreaming});", null)
+                        }
+                    }
+                    loadDataWithBaseURL("https://cintra.local/", shellHtml, "text/html", "UTF-8", null)
+                }
+            },
+            update = { wv ->
+                if (wv.tag == "READY") {
+                    wv.evaluateJavascript("window.__cintraUpdate('$payloadB64', ${!isStreaming});", null)
+                }
+            },
+        )
+    }
 }

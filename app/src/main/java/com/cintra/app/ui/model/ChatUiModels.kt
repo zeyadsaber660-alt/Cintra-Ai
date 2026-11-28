@@ -60,6 +60,7 @@ data class GeneratedPptxDoc(
     val fileName: String,
     val slides: List<com.cintra.app.utils.PptxSlideData>,
     val summary: String = "",
+    val theme: com.cintra.app.utils.PptxThemeData = com.cintra.app.utils.PptxThemeData(),
 )
 
 data class GeneratedDocxDoc(
@@ -67,6 +68,7 @@ data class GeneratedDocxDoc(
     val fileName: String,
     val sections: List<com.cintra.app.utils.DocxSectionData>,
     val summary: String = "",
+    val accentHex: String = "0284C7",
 )
 
 sealed interface GenUi {

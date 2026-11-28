@@ -83,6 +83,7 @@ import com.cintra.app.utils.CintraPdfExporter
 import com.cintra.app.ui.model.WebPhotoItem
 import com.cintra.app.ui.theme.CintraIcons
 import com.cintra.app.ui.theme.CintraThemePalette
+import com.cintra.app.ui.theme.CintraToastManager
 
 @Composable
 fun GenUiView(
@@ -644,11 +645,12 @@ fun GeneratedPptxCard(pptx: GeneratedPptxDoc) {
                                 title = pptx.title,
                                 slides = pptx.slides,
                                 fileName = pptx.fileName,
+                                theme = pptx.theme,
                                 onSuccess = { uri, finalName ->
                                     isSaving = false; savedUri = uri; savedName = finalName
-                                    Toast.makeText(context, "تم حفظ $finalName في التنزيلات", Toast.LENGTH_SHORT).show()
+                                    CintraToastManager.show("تم حفظ $finalName في التنزيلات")
                                 },
-                                onError = { err -> isSaving = false; Toast.makeText(context, err, Toast.LENGTH_SHORT).show() },
+                                onError = { err -> isSaving = false; CintraToastManager.show(err, error = true) },
                             )
                         }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -741,11 +743,12 @@ fun GeneratedDocxCard(docx: GeneratedDocxDoc) {
                                 title = docx.title,
                                 sections = docx.sections,
                                 fileName = docx.fileName,
+                                accentHex = docx.accentHex,
                                 onSuccess = { uri, finalName ->
                                     isSaving = false; savedUri = uri; savedName = finalName
-                                    Toast.makeText(context, "تم حفظ $finalName في التنزيلات", Toast.LENGTH_SHORT).show()
+                                    CintraToastManager.show("تم حفظ $finalName في التنزيلات")
                                 },
-                                onError = { err -> isSaving = false; Toast.makeText(context, err, Toast.LENGTH_SHORT).show() },
+                                onError = { err -> isSaving = false; CintraToastManager.show(err, error = true) },
                             )
                         }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -847,11 +850,11 @@ fun GeneratedGenericFileCard(file: GeneratedGenericFile) {
                                     isSaving = false
                                     savedUri = uri
                                     savedName = finalName
-                                    Toast.makeText(context, "تم حفظ $finalName في التنزيلات", Toast.LENGTH_SHORT).show()
+                                    CintraToastManager.show("تم حفظ $finalName في التنزيلات")
                                 },
                                 onError = { err ->
                                     isSaving = false
-                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                    CintraToastManager.show(err, error = true)
                                 },
                             )
                         }
@@ -992,11 +995,11 @@ fun GeneratedPdfFileCard(pdf: GeneratedPdfDoc) {
                                     isSaving = false
                                     savedUri = uri
                                     savedName = finalName
-                                    Toast.makeText(context, "تم حفظ $finalName في التنزيلات", Toast.LENGTH_SHORT).show()
+                                    CintraToastManager.show("تم حفظ $finalName في التنزيلات")
                                 },
                                 onError = { err ->
                                     isSaving = false
-                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                    CintraToastManager.show(err, error = true)
                                 },
                             )
                         }
@@ -1026,7 +1029,7 @@ fun GeneratedPdfFileCard(pdf: GeneratedPdfDoc) {
                         .background(palette.emerald)
                         .clickable {
                             val ok = CintraPdfExporter.openPdfUri(context, savedUri!!)
-                            if (!ok) Toast.makeText(context, "لا يوجد تطبيق لفتح ملفات PDF", Toast.LENGTH_SHORT).show()
+                            if (!ok) CintraToastManager.show("لا يوجد تطبيق لفتح ملفات PDF", error = true)
                         }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,

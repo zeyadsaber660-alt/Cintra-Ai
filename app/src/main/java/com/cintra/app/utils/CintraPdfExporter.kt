@@ -81,6 +81,32 @@ object CintraPdfExporter {
         if (cleanBody.contains("<html", ignoreCase = true) && cleanBody.contains("</html>", ignoreCase = true)) {
             return ensureFullArabicHtml(title, cleanBody)
         }
+        val isFreeDesign = template.equals("free", ignoreCase = true) ||
+            template.equals("custom", ignoreCase = true) ||
+            cleanBody.contains("<style", ignoreCase = true) ||
+            cleanBody.contains("<header", ignoreCase = true)
+        if (isFreeDesign) {
+            return """
+                <!DOCTYPE html>
+                <html dir="rtl" lang="ar">
+                <head>
+                  <meta charset="UTF-8" />
+                  <meta name="viewport" content="width=794, initial-scale=1.0, maximum-scale=1.0" />
+                  <script src="https://cdn.tailwindcss.com"></script>
+                  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+                  <style>
+                    html, body { width: 794px; max-width: 794px; margin: 0 auto; background: #FFFFFF; color: #0F172A; font-family: 'Cairo', 'Tajawal', sans-serif; line-height: 1.85; font-size: 14px; -webkit-text-size-adjust: 100%; padding: 32px; }
+                    * { box-sizing: border-box; }
+                    sup { font-size: 0.72em; line-height: 0; position: relative; vertical-align: baseline; top: -0.45em; }
+                    thead { display: table-header-group; } tr, .math-block { page-break-inside: avoid; break-inside: avoid; }
+                  </style>
+                </head>
+                <body>
+                  $cleanBody
+                </body>
+                </html>
+            """.trimIndent()
+        }
         val (heroGrad, accentHex, badgeLabel) = when (template.lowercase().trim()) {
             "invoice" -> Triple("from-slate-900 via-emerald-900 to-teal-700", "#059669", "فاتورة رسمية")
             "report" -> Triple("from-slate-900 via-slate-800 to-sky-800", "#0284C7", "تقرير احترافي")

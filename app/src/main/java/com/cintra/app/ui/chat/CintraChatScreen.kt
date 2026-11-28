@@ -110,6 +110,7 @@ import com.cintra.app.ui.theme.CintraIcons
 import com.cintra.app.ui.theme.CintraPalette
 import com.cintra.app.ui.theme.CintraTheme
 import com.cintra.app.ui.theme.CintraThemePalette
+import com.cintra.app.ui.theme.CintraGlassToastHost
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import dev.chrisbanes.haze.HazeState
@@ -513,7 +514,14 @@ private fun CintraChatScreenContent(
             onCopy = { copyToClipboard(context, it); viewModel.showToast("تم النسخ") },
         )
 
-        CintraLiveOverlay(
+        CintraGlassToastHost(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 64.dp),
+            )
+
+            CintraLiveOverlay(
             hazeState = hazeState,
             visible = state.isLiveActive,
             modelName = state.selectedModel.name,

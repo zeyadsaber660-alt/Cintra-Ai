@@ -227,7 +227,8 @@ class CintraWorkerStreamService(
                             emit(AiStreamChunk.ReasoningDelta(reasoning))
                         }
 
-                        val content = delta.optString("content", "")
+                        val rawContent = delta.optString("content", "")
+                        val content = sanitizeCjkIfNeeded(rawContent, request.prompt)
                         if (content.isNotEmpty()) {
                             if (hasReasoning && !reasoningDone) {
                                 reasoningDone = true
@@ -235,6 +236,9 @@ class CintraWorkerStreamService(
                             }
                             fullContent.append(content)
                             emit(AiStreamChunk.ContentDelta(content))
+                            if (fullContent.length > 300 && isClientLooping(fullContent.toString())) {
+                                break
+                            }
                         }
                     }
                 }
@@ -336,14 +340,35 @@ class CintraWorkerStreamService(
                 val fileName = obj.optString("fileName", "Cintra_Presentation.pptx")
                     .let { if (it.endsWith(".pptx", true)) it else "$it.pptx" }
                 val summary = obj.optString("summary", "عرض تقديمي PowerPoint جاهز للتحميل")
+                val tObj = obj.optJSONObject("theme")
+                val theme = if (tObj != null) {
+                    com.cintra.app.utils.PptxThemeData(
+                        bg = tObj.optString("bg", "0F172A"),
+                        slideBg = tObj.optString("slideBg", "F8FAFC"),
+                        headerBg = tObj.optString("headerBg", tObj.optString("bg", "0F172A")),
+                        accent = tObj.optString("accent", "0EA5E9"),
+                        accent2 = tObj.optString("accent2", "10B981"),
+                        cardBg = tObj.optString("cardBg", "FFFFFF"),
+                        text = tObj.optString("text", "1E293B"),
+                        subtext = tObj.optString("subtext", "64748B"),
+                    )
+                } else com.cintra.app.utils.PptxThemeData()
                 val arr = obj.optJSONArray("slides") ?: return@runCatching null
                 val slides = (0 until arr.length()).mapNotNull { i ->
                     val s = arr.optJSONObject(i) ?: return@mapNotNull null
                     val bArr = s.optJSONArray("bullets")
                     val bullets = if (bArr != null) (0 until bArr.length()).mapNotNull { j -> bArr.optString(j).takeIf { it.isNotBlank() } } else emptyList()
-                    PptxSlideData(title = s.optString("title", "Slide ${i + 1}"), bullets = bullets)
+                    PptxSlideData(
+                        title = s.optString("title", "Slide ${i + 1}"),
+                        bullets = bullets,
+                        layout = s.optString("layout", if (i == 0) "cover" else "cards"),
+                        subtitle = s.optString("subtitle", ""),
+                        leftTitle = s.optString("leftTitle", ""),
+                        rightTitle = s.optString("rightTitle", ""),
+                        accentOverride = s.optString("accent", "").ifBlank { null },
+                    )
                 }
-                if (slides.isNotEmpty()) GeneratedPptxDoc(title, fileName, slides, summary) else null
+                if (slides.isNotEmpty()) GeneratedPptxDoc(title, fileName, slides, summary, theme) else null
             }.getOrNull()
         }
         val askedForPptx = Regex("(pptx|powerpoint|presentation|بريزنتيشن|باوربوينت|عرض\\s*تقديمي)", RegexOption.IGNORE_CASE)
@@ -381,6 +406,7 @@ class CintraWorkerStreamService(
                 val fileName = obj.optString("fileName", "Cintra_Document.docx")
                     .let { if (it.endsWith(".docx", true)) it else "$it.docx" }
                 val summary = obj.optString("summary", "مستند Word جاهز للتحميل")
+                val accent = obj.optString("accent", "0284C7")
                 val arr = obj.optJSONArray("sections") ?: return@runCatching null
                 val sections = (0 until arr.length()).mapNotNull { i ->
                     val s = arr.optJSONObject(i) ?: return@mapNotNull null
@@ -388,7 +414,7 @@ class CintraWorkerStreamService(
                     val paras = if (pArr != null) (0 until pArr.length()).mapNotNull { j -> pArr.optString(j).takeIf { it.isNotBlank() } } else emptyList()
                     DocxSectionData(heading = s.optString("heading", ""), paragraphs = paras)
                 }
-                if (sections.isNotEmpty()) GeneratedDocxDoc(title, fileName, sections, summary) else null
+                if (sections.isNotEmpty()) GeneratedDocxDoc(title, fileName, sections, summary, accent) else null
             }.getOrNull()
         }
         return null
@@ -468,5 +494,27 @@ class CintraWorkerStreamService(
             if (prompt.isNotEmpty()) return GenUi.GeneratedImage(prompt)
         }
         return null
+    }
+
+    private val cjkRegex = Regex("[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3000-\u303F]+")
+
+    private fun sanitizeCjkIfNeeded(chunk: String, prompt: String): String {
+        if (chunk.isEmpty() || !cjkRegex.containsMatchIn(chunk)) return chunk
+        val wantsCjk = cjkRegex.containsMatchIn(prompt) ||
+            Regex("(صيني|الصينية|ياباني|اليابانية|كوري|الكورية|chinese|japanese|korean)", RegexOption.IGNORE_CASE).containsMatchIn(prompt)
+        return if (wantsCjk) chunk else chunk.replace(cjkRegex, "")
+    }
+
+    private fun isClientLooping(text: String): Boolean {
+        val tail = if (text.length > 1200) text.takeLast(1200) else text
+        for (len in intArrayOf(36, 60, 96)) {
+            if (tail.length < len * 3) continue
+            val c1 = tail.substring(tail.length - len)
+            if (c1.trim().length < 18) continue
+            val c2 = tail.substring(tail.length - len * 2, tail.length - len)
+            val c3 = tail.substring(tail.length - len * 3, tail.length - len * 2)
+            if (c1 == c2 && c2 == c3) return true
+        }
+        return false
     }
 }

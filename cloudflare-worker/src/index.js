@@ -1,49 +1,36 @@
 /**
- * Cintra AI — Secure Cloudflare Worker Proxy & Multi-Page Frosted Liquid Glass Control Center v20
+ * Cintra AI — Secure Cloudflare Worker Proxy & Multi-Page Frosted Liquid Glass Control Center v25
  *
- * Endpoints:
- *  - GET  / or /dashboard       -> 5-Page Frosted Liquid Glass Admin Control Center (Persistent Login)
- *  - GET  /v1/app/status        -> Remote Maintenance Mode, Broadcast Announcement & Feature Flags
- *  - GET  /api/admin/config     -> Load full masked config + live stats (X-Admin-Secret)
- *  - POST /api/admin/config     -> Save models, image API, search key, maintenance & broadcast to KV
- *  - POST /api/admin/test       -> Live per-model API connectivity test with latency readout
- *  - POST /v1/images/generate   -> Custom Image Generation API proxy (Bearer APP_TOKEN)
- *  - POST /v1/chat/stream       -> Fast parallel-search SSE streaming proxy (Bearer APP_TOKEN)
+ * Upgrades in v25:
+ *  - Reliable Universal Web Search (Bearer + api_key, Nexora/Tavily/Serper/Brave/DDG, 6.5s timeout, auto-fallback to cintra-pro key)
+ *  - Universal Link & YouTube Reader (up to 3 URLs, browser UA, Jina Reader fallback for JS SPAs, auto-adds to cintra_sources)
+ *  - Real-Time SSE CJK/Chinese Leak Sanitizer + Anti-Loop Repetition Guard (stops infinite loops cleanly)
+ *  - Token-Efficient Invisible Live HTML/CSS/JS UI (`cintra-ui` compact inner fragments, free topic colors, zero boilerplate)
+ *  - Unconstrained Creative PowerPoint (`cintra-pptx` custom palettes & layouts), Word (`cintra-docx`), Excel/CSV & free-design PDF (`cintra-pdf`)
  */
 
 const CONFIG_KEY = "cintra_models_config_v2";
 const STATS_KEY = "cintra_stats_v1";
 
 const SMART_UI_DIRECTIVE = [
-  "You are Cintra, a warm, crystal-clear bilingual Arabic/English AI tutor and assistant.",
-  "- TOKEN EFFICIENCY: Keep internal thinking under 40 words. NEVER draft HTML, CSS, SVG, or full code inside thinking.",
-  "- For simple greetings (اهلا، مرحبا، hello), reply warmly in 1-2 short sentences with zero thinking.",
-  "- Write clean natural Arabic (never mix random French/broken English words). NEVER write &mathbb;N — ALWAYS use real Unicode symbols (ℕ, ℤ, ℚ, ℝ, ℂ, ∅, ∪, ∩, ⊆).",
-  "- STRICT FILE-GROUNDED TUTOR STYLE (like ChatGPT): When the user attaches a lecture/PDF and asks to explain it step-by-step:",
-  "  * Stick 100% to the EXACT concepts, English terms, order, and real examples inside the attached file — NEVER invent unrelated concepts or jump outside the file.",
-  "  * If the file is large (25+ pages), announce that you will explain it cleanly in Parts (start with Part 1 covering the first ~20 pages thoroughly without skipping any example, then offer to continue Part 2).",
-  "  * Keep layout airy and scannable: short 1-2 line paragraphs, keep English technical terms as-is with clear Egyptian/natural Arabic explanation (بالبلدي / بالعامية), put formal definitions inside > Definition: ... callout boxes, and put EVERY math equation on its own centered $$...$$ line (NEVER wrap math inside inline backticks `...`).",
-  "  * Always write a fresh quiz question from the ACTUAL file content (never repeat generic A={1,2,3} examples).",
-  "- VISUAL & INTERACTIVE TOOLS (use only when genuinely helpful):",
-  "  1. Flowcharts / Mindmaps / Sequence Diagrams -> emit valid Mermaid syntax inside ```mermaid\\n...\\n```.",
-  "  2. Statistical Charts (bar, line, pie, doughnut) -> emit Chart.js config JSON inside ```cintra-chart\\n{\"type\":\"bar\",\"data\":{\"labels\":[\"A\",\"B\"],\"datasets\":[{\"label\":\"القيمة\",\"data\":[80,95]}]}}\\n```.",
-  "  3. Interactive Practice Quiz (after study explanations) -> emit JSON inside ```cintra-quiz\\n{\"question\":\"سؤال تدريبي؟\",\"options\":[\"اختيار 1\",\"اختيار 2\",\"اختيار 3\",\"اختيار 4\"],\"answerIndex\":0,\"explanation\":\"سبب الإجابة الصحيحة\"}\\n```.",
-  "  4. Interactive Calculators / Sliders / Mini-Apps -> emit self-contained Arabic RTL HTML+Tailwind+JS inside ```cintra-widget\\n...\\n```.",
-  "  5. Venn Diagrams / Simple Geometry -> emit clean SVG with explicit viewBox inside ```cintra-svg\\n<svg viewBox=\"0 0 340 180\" ...>...</svg>\\n```.",
-  "- Put standalone math equations on their own centered line wrapped in $$...$$ using ONLY clean Unicode symbols (NEVER write \\quad, \\;, \\{, \\} — write plain {1, 2, 3} and clean Arabic math terms like خاصية الإبدال / التجميع / التوزيع).",
-  "- NEVER use <br> inside Markdown tables. Use > blockquotes for key rules/answers and ==word== for highlights.",
-  "- PDF GENERATION (RICH & COMPLETE): Built-in Tailwind+Cairo RTL templates (study_guide, report, invoice, cheat_sheet). Write a rich exam-ready document with explanations, step-by-step solved numerical examples, tables, exam traps, and practice questions. Always use HTML <sup> for exponents (2<sup>n</sup>, f<sup>-1</sup>), <span class=\"math\"> inline, and <div class=\"math-block\"> for standalone equations. Emit inside:",
-  "```cintra-pdf",
-  "TITLE: عنوان المستند",
-  "FILENAME: summary.pdf",
-  "TEMPLATE: study_guide",
-  "SUMMARY: وصف مختصر",
-  "---HTML---",
-  '<h2>1. العنوان</h2><p>الشرح المفصل والأمثلة...</p><div class="box-green"><strong>قاعدة ذهبية:</strong> ...</div>',
+  "You are Cintra, an intelligent, warm, bilingual Arabic/English AI assistant.",
+  "- STRICT LANGUAGE GUARD: Reply in clean, natural Arabic (or the user's language). NEVER output Chinese/CJK characters, Russian, or random mixed English words. Only keep genuine technical/scientific terms in English inside parentheses.",
+  "- TOKEN EFFICIENCY & ANTI-LOOP: Keep internal thinking under 35 words. NEVER draft HTML/CSS/code inside thinking. NEVER repeat sentences or phrases.",
+  "- INVISIBLE LIVE UI MODE (TOKEN-EFFICIENT HTML/CSS/JS): For chat replies, you may design the response directly using compact inner HTML inside ```cintra-ui\\n...\\n``` — the app renders ONLY the final visual output with live typing animation and NEVER shows code to the user.",
+  "  * SAVE 80% TOKENS: NEVER write <!DOCTYPE>, <html>, <head>, <body>, or font imports (the app shell already provides Cairo font, RTL/LTR, smooth typing reveal, and dark/light contrast). Emit ONLY the clean inner HTML fragment!",
+  "  * FREE CREATIVE COLORS & LAYOUT: Do NOT stick to one rigid theme! Pick harmonious accent colors and layout that fit the topic naturally (e.g. warm emerald/amber greeting card for 'السلام عليكم', clean editorial cards/badges for study & explanations, interactive tabs/calculators/flashcards with compact <script> when interactivity helps).",
+  "  * SCALE WITH COMPLEXITY: For simple greetings ('السلام عليكم', 'اهلا'), emit just 1-2 ultra-compact styled lines (~25-40 tokens) with a subtle warm badge — no bloated CSS. For rich answers, use clean compact CSS variables or inline styles and <script> only when interactive.",
+  "  * STRICT FILE-GROUNDED TUTOR: When the user attaches a lecture/PDF and asks to explain it, stick 100% to the file's EXACT concepts, English terms, order, and real examples (split 25+ page PDFs into Part 1 / Part 2 cleanly; put formal definitions in callout cards and math equations on centered LTR lines with real Unicode symbols ℕ, ℤ, ℚ, ℝ, ℂ, ∅, ∪, ∩, ⊆, Ω — never &mathbb; or \\quad).",
+  "- PRESENTATIONS / POWERPOINT (UNCONSTRAINED DESIGN): Whenever the user asks for a presentation, PowerPoint, slides, بريزنتيشن, باوربوينت, or عرض تقديمي — ALWAYS generate a real PowerPoint file using ```cintra-pptx (NEVER generate a PDF or .md instead!). You have FULL creative freedom over colors and layouts — choose a unique palette & per-slide layout that fits the topic:",
+  "```cintra-pptx",
+  "{\"title\":\"Presentation Title\",\"fileName\":\"Presentation.pptx\",\"summary\":\"وصف مختصر\",\"theme\":{\"bg\":\"#0F172A\",\"slideBg\":\"#F8FAFC\",\"headerBg\":\"#1E293B\",\"accent\":\"#10B981\",\"accent2\":\"#F59E0B\",\"cardBg\":\"#FFFFFF\",\"text\":\"#0F172A\",\"subtext\":\"#475569\"},\"slides\":[{\"layout\":\"cover\",\"title\":\"Main Title\",\"subtitle\":\"Subtitle or Presenter\",\"bullets\":[\"Key tagline\"]},{\"layout\":\"cards\",\"title\":\"Slide Title\",\"bullets\":[\"Point 1\",\"Point 2\",\"Point 3\"]},{\"layout\":\"two_column\",\"title\":\"Comparison\",\"leftTitle\":\"Column A\",\"rightTitle\":\"Column B\",\"bullets\":[\"Left 1\",\"Left 2\",\"Right 1\",\"Right 2\"]},{\"layout\":\"stats\",\"title\":\"Key Metrics\",\"bullets\":[\"95% | Accuracy Rate\",\"3.2x | Speed Boost\",\"50+ | Global Partners\"]},{\"layout\":\"closing\",\"title\":\"Thank You\",\"bullets\":[\"Questions & Discussion\"]}]}",
   "```",
-  "- For image generation: ```genui-image\\nDetailed English visual prompt\\n```.",
-  "- For other downloadable files (txt, json, csv, html, py): ```cintra-file\\nTITLE: ...\\nFILENAME: ...\\nMIME: ...\\nSUMMARY: ...\\n---CONTENT---\\n...\\n```.",
-  "- Optionally end informative replies with 2-3 short Arabic follow-up chips inside ```cintra-suggestions\\n[\"اقتراح 1\", \"اقتراح 2\"]\\n```."
+  "- WORD DOCUMENTS: When asked for Word / .docx / وورد, emit ```cintra-docx\\n{\"title\":\"...\",\"fileName\":\"Doc.docx\",\"accent\":\"#0EA5E9\",\"summary\":\"...\",\"sections\":[{\"heading\":\"...\",\"paragraphs\":[\"...\"]}]}\\n```.",
+  "- PDF GENERATION (FREE DESIGN, ZERO LOCK-IN): When asked for a PDF / بي دي اف, emit ```cintra-pdf\\nTITLE: ...\\nFILENAME: doc.pdf\\nTEMPLATE: free\\nSUMMARY: ...\\n---HTML---\\n<style>/* Your free custom palette & layout */</style>...\\n``` — you have 100% creative freedom over colors, headers, typography, cards, and layout! Always use HTML <sup> for exponents and real Unicode math symbols.",
+  "- OTHER FILES (Excel .csv, .json, .txt, .html, .py, .js, .kt, etc.): Emit ```cintra-file\\nTITLE: ...\\nFILENAME: data.csv\\nMIME: text/csv\\nSUMMARY: ...\\n---CONTENT---\\n...\\n```.",
+  "- VISUAL TOOLS (when helpful): ```mermaid (flowcharts/mindmaps), ```cintra-chart (Chart.js JSON), ```cintra-quiz ({\"question\":\"...\",\"options\":[...],\"answerIndex\":0,\"explanation\":\"...\"}), ```cintra-svg (<svg viewBox=\"...\">), ```genui-image (English image prompt).",
+  "- WEB & LINKS: If Live Web Search Results or URL Content are provided below, USE them accurately and mention the facts clearly without claiming you cannot browse the web.",
+  "- Optionally end informative replies with 2-3 short follow-up chips inside ```cintra-suggestions\\n[\"اقتراح 1\", \"اقتراح 2\"]\\n```."
 ].join("\n");
 
 const DEFAULT_CONFIG = {
@@ -59,7 +46,7 @@ const DEFAULT_CONFIG = {
       baseUrl: "https://nexora-llm.onrender.com/v1",
       modelId: "auto:fast",
       apiKey: "",
-      systemPrompt: "You are Cintra Pro — precise, thorough, and skilled in coding and analysis."
+      systemPrompt: "You are Cintra Pro — precise, thorough, creative, and fluent in Arabic and English."
     },
     "cintra-think": {
       label: "Cintra Think",
@@ -161,51 +148,143 @@ function verifyAppToken(request, env) {
 function needsAutoWebSearch(prompt, tool, autoEnabled) {
   if (tool === "web") return true;
   if (!autoEnabled || !prompt) return false;
-  return /(دور|دورلي|ابحث|بحث|صح ولا لا|حقيقة|تأكد|تأكيد|مصدر|مصادر|وشاح|طرق السفر|سفر|السفر|فيزا|تأشيرة|هجرة|سعر|اسعار|أسعار|اليوم|أحدث|أخبار|طقس|2025|2026|2027|search|verify|fact check|travel|visa|latest|news|price|weather|today|current)/i.test(prompt);
+  const p = prompt.trim();
+  if (p.length < 4) return false;
+  if (/^(السلام|اهلا|أهلا|أهلاً|مرحبا|مرحباً|ازيك|إزيك|هاي|هلو|صباح|مساء|شكرا|شكراً|hello|hi|hey|thanks)\b/i.test(p) && p.length < 30) {
+    return false;
+  }
+  return /(دور|دورلي|ابحث|بحث|ويب|انترنت|إنترنت|النت|صح ولا لا|حقيقة|تأكد|تأكيد|مصدر|مصادر|سفر|السفر|فيزا|تأشيرة|هجرة|سعر|اسعار|أسعار|بكام|كام|دولار|جنيه|ذهب|اليوم|النهاردة|النهارده|أحدث|احدث|آخر|اخر|أخبار|اخبار|جديد|تحديث|طقس|مباراة|مباريات|نتيجة|نتائج|مين فاز|من هو|ما هو|2025|2026|2027|search|google|web|verify|fact check|travel|visa|latest|news|price|weather|today|current|who is|what happened|how much|score|release)/i.test(p);
 }
 
-async function runAutoWebSearch(query, tavilyApiKey, searchApiUrl) {
+function extractSearchItems(data) {
+  if (!data || typeof data !== "object") return { items: [], answer: "" };
+  const rawList =
+    (Array.isArray(data.results) && data.results) ||
+    (Array.isArray(data.data) && data.data) ||
+    (Array.isArray(data.organic) && data.organic) ||
+    (Array.isArray(data.items) && data.items) ||
+    (Array.isArray(data.web?.results) && data.web.results) ||
+    (Array.isArray(data.sources) && data.sources) ||
+    [];
+  const items = rawList.slice(0, 5).map((r) => ({
+    title: String(r.title || r.name || r.url || r.link || "Result").trim(),
+    url: String(r.url || r.link || r.href || "").trim(),
+    content: String(r.content || r.snippet || r.description || r.body || r.text || "").trim().slice(0, 600)
+  })).filter((r) => r.title || r.content || r.url);
+  const answer = String(data.answer || data.summary || data.direct_answer || "").trim();
+  return { items, answer };
+}
+
+async function runAutoWebSearch(query, searchApiKey, searchApiUrl, fallbackKey) {
   const sources = [];
-  try {
-    if (tavilyApiKey) {
-      const resp = await fetch(searchApiUrl || "https://api.tavily.com/search", {
+  const effectiveUrl = (searchApiUrl || "").trim() || "https://api.tavily.com/search";
+  const effectiveKey = (searchApiKey || "").trim() || (effectiveUrl.includes("tavily.com") ? "" : (fallbackKey || "").trim());
+
+  // 1. Primary Configured Search API (Tavily, Nexora /v1/search, Serper, Brave, Custom)
+  if (effectiveKey || !effectiveUrl.includes("tavily.com")) {
+    try {
+      const headers = { "Content-Type": "application/json", "Accept": "application/json" };
+      if (effectiveKey) {
+        headers["Authorization"] = "Bearer " + effectiveKey;
+        headers["X-API-KEY"] = effectiveKey;
+      }
+      const resp = await fetch(effectiveUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: tavilyApiKey, query, max_results: 4, include_answer: true, search_depth: "basic" })
+        headers,
+        body: JSON.stringify({
+          api_key: effectiveKey || undefined,
+          query,
+          q: query,
+          max_results: 5,
+          num: 5,
+          include_answer: true,
+          search_depth: "basic"
+        })
       });
       if (resp.ok) {
-        const data = await resp.json();
-        const snippets = (data.results || []).map((r, i) => {
-          if (r.url) sources.push({ title: r.title || r.url, url: r.url });
-          return "[" + (i + 1) + "] " + r.title + " (" + r.url + "): " + r.content;
-        }).join("\n");
-        return { text: snippets || data.answer || "", sources };
+        const data = await resp.json().catch(() => null);
+        const { items, answer } = extractSearchItems(data);
+        if (items.length > 0 || answer) {
+          const snippets = items.map((r, i) => {
+            if (r.url && r.url.startsWith("http")) sources.push({ title: r.title, url: r.url });
+            return "[" + (i + 1) + "] " + r.title + (r.url ? " (" + r.url + ")" : "") + ": " + r.content;
+          }).join("\n");
+          const combined = [answer ? "Direct Answer: " + answer : "", snippets].filter(Boolean).join("\n");
+          if (combined.trim()) return { text: combined, sources, provider: effectiveUrl };
+        }
       }
-    }
+    } catch (_e) {}
+  }
+
+  // 2. Fallback: DuckDuckGo Instant Answer + HTML Lite
+  try {
     const ddg = await fetch("https://api.duckduckgo.com/?q=" + encodeURIComponent(query) + "&format=json&no_html=1");
     if (ddg.ok) {
       const d = await ddg.json();
-      if (d.AbstractURL) sources.push({ title: d.Heading || "Source", url: d.AbstractURL });
-      if (d.AbstractText) return { text: (d.Heading || "") + ": " + d.AbstractText + " (" + (d.AbstractURL || "") + ")", sources };
+      if (d.AbstractURL) sources.push({ title: d.Heading || "DuckDuckGo", url: d.AbstractURL });
+      if (d.AbstractText) {
+        return { text: (d.Heading || "") + ": " + d.AbstractText + " (" + (d.AbstractURL || "") + ")", sources, provider: "duckduckgo" };
+      }
+      const rel = (d.RelatedTopics || []).filter((t) => t && t.Text).slice(0, 4);
+      if (rel.length > 0) {
+        const relTxt = rel.map((t, i) => {
+          if (t.FirstURL) sources.push({ title: t.Text.slice(0, 60), url: t.FirstURL });
+          return "[" + (i + 1) + "] " + t.Text + (t.FirstURL ? " (" + t.FirstURL + ")" : "");
+        }).join("\n");
+        return { text: relTxt, sources, provider: "duckduckgo" };
+      }
     }
   } catch (_e) {}
-  return { text: "", sources };
+
+  return { text: "", sources, provider: "none" };
 }
 
-async function fetchUrlContext(prompt) {
-  const m = (prompt || "").match(/https?:\/\/[^\s<>")]+/i);
-  if (!m) return "";
-  const targetUrl = m[0];
+function extractUrlsFromText(prompt) {
+  if (!prompt) return [];
+  const matches = prompt.match(/(?:https?:\/\/|www\.)[^\s<>")\]']+/gi) || [];
+  const seen = new Set();
+  const out = [];
+  for (let raw of matches) {
+    raw = raw.replace(/[.,;:!?،؟]+$/, "");
+    if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
+    if (!seen.has(raw)) {
+      seen.add(raw);
+      out.push(raw);
+    }
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+function decodeHtmlEntities(str) {
+  return str
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+async function readSingleUrl(targetUrl) {
   try {
+    // YouTube oEmbed + Description + Transcript
     if (/(youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts)/i.test(targetUrl)) {
       const [oembedResp, pageResp] = await Promise.all([
         fetch("https://www.youtube.com/oembed?url=" + encodeURIComponent(targetUrl) + "&format=json").catch(() => null),
-        fetch(targetUrl, { headers: { "User-Agent": "Mozilla/5.0", "Accept-Language": "ar,en;q=0.9" } }).catch(() => null)
+        fetch(targetUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+            "Accept-Language": "ar,en;q=0.9"
+          }
+        }).catch(() => null)
       ]);
       let info = "";
+      let title = "YouTube Video";
       if (oembedResp && oembedResp.ok) {
         const oe = await oembedResp.json();
-        info += "YouTube Video: " + (oe.title || "") + " | Channel: " + (oe.author_name || "") + "\n";
+        title = oe.title || title;
+        info += "YouTube Video: " + title + " | Channel: " + (oe.author_name || "") + "\n";
       }
       if (pageResp && pageResp.ok) {
         const html = await pageResp.text();
@@ -219,21 +298,78 @@ async function fetchUrlContext(prompt) {
           const capResp = await fetch(capUrl).catch(() => null);
           if (capResp && capResp.ok) {
             const xml = await capResp.text();
-            const transcript = xml.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 5000);
+            const transcript = decodeHtmlEntities(xml.replace(/<[^>]+>/g, " ")).replace(/\s{2,}/g, " ").trim().slice(0, 5000);
             if (transcript) info += "Transcript:\n" + transcript + "\n";
           }
         }
       }
-      return info.trim();
+      return { text: info.trim(), source: { title, url: targetUrl } };
     }
-    const r = await fetch(targetUrl, { headers: { "User-Agent": "CintraAI/20.0" } });
-    if (!r.ok) return "";
-    const html = await r.text();
-    const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 6000);
-    return text ? "URL Content (" + targetUrl + "):\n" + text : "";
+
+    // Standard Webpage Fetch with Browser User-Agent
+    let title = "";
+    let extracted = "";
+    try {
+      const r = await fetch(targetUrl, {
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "ar,en-US;q=0.9,en;q=0.8"
+        }
+      });
+      if (r.ok) {
+        const html = await r.text();
+        const tMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        if (tMatch) title = decodeHtmlEntities(tMatch[1]).replace(/\s+/g, " ").trim().slice(0, 120);
+        const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+        const metaDesc = descMatch ? decodeHtmlEntities(descMatch[1]).trim() : "";
+        const bodyText = decodeHtmlEntities(
+          html
+            .replace(/<script[\s\S]*?<\/script>/gi, " ")
+            .replace(/<style[\s\S]*?<\/style>/gi, " ")
+            .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+            .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+            .replace(/<[^>]+>/g, " ")
+        ).replace(/\s{2,}/g, " ").trim().slice(0, 6500);
+        extracted = [title ? "Title: " + title : "", metaDesc ? "Summary: " + metaDesc : "", bodyText].filter(Boolean).join("\n");
+      }
+    } catch (_e) {}
+
+    // Fallback to Jina Reader for JS-rendered SPAs or blocked pages
+    if (extracted.length < 180) {
+      try {
+        const jina = await fetch("https://r.jina.ai/" + targetUrl, {
+          headers: { "Accept": "text/plain", "X-No-Cache": "true" }
+        });
+        if (jina.ok) {
+          const md = (await jina.text()).trim().slice(0, 6500);
+          if (md.length > extracted.length) extracted = md;
+        }
+      } catch (_e) {}
+    }
+
+    if (!extracted) return { text: "", source: null };
+    return {
+      text: "URL Content (" + targetUrl + "):\n" + extracted,
+      source: { title: title || targetUrl, url: targetUrl }
+    };
   } catch (_e) {
-    return "";
+    return { text: "", source: null };
   }
+}
+
+async function fetchUrlContext(prompt) {
+  const urls = extractUrlsFromText(prompt);
+  if (urls.length === 0) return { text: "", sources: [] };
+  const results = await Promise.all(urls.map((u) => readSingleUrl(u)));
+  const texts = [];
+  const sources = [];
+  for (const res of results) {
+    if (res.text) texts.push(res.text);
+    if (res.source) sources.push(res.source);
+  }
+  return { text: texts.join("\n\n---\n\n"), sources };
 }
 
 function needsRealWebPhotos(prompt) {
@@ -246,7 +382,7 @@ async function fetchRealWebPhotos(query, tavilyApiKey) {
   if (!needsRealWebPhotos(query)) return [];
   const photos = [];
   try {
-    if (tavilyApiKey) {
+    if (tavilyApiKey && tavilyApiKey.startsWith("tvly-")) {
       const r = await fetch("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -266,6 +402,39 @@ async function fetchRealWebPhotos(query, tavilyApiKey) {
   return photos;
 }
 
+// Strip leaked CJK/Chinese characters from free LLMs unless user explicitly asked for CJK
+const CJK_REGEX = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3000-\u303F]+/g;
+function userWantsCjk(prompt) {
+  if (!prompt) return false;
+  return CJK_REGEX.test(prompt) || /(صيني|الصينية|ياباني|اليابانية|كوري|الكورية|chinese|japanese|korean|mandarin)/i.test(prompt);
+}
+
+// Detect infinite repetition loops in rolling output buffer
+function isStuckInLoop(text) {
+  if (!text || text.length < 240) return false;
+  const tail = text.slice(-1400);
+  // 1. Check for any 32..140 char chunk repeating 3+ consecutive times
+  for (const len of [36, 56, 84, 120]) {
+    if (tail.length < len * 3) continue;
+    const chunk = tail.slice(-len);
+    if (chunk.trim().length < 18) continue;
+    const prev1 = tail.slice(-len * 2, -len);
+    const prev2 = tail.slice(-len * 3, -len * 2);
+    if (chunk === prev1 && prev1 === prev2) return true;
+  }
+  // 2. Check for identical non-empty lines repeating 5+ times in tail
+  const lines = tail.split("\n").map((l) => l.trim()).filter((l) => l.length >= 12);
+  if (lines.length >= 6) {
+    const lastLine = lines[lines.length - 1];
+    let count = 0;
+    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 10); i--) {
+      if (lines[i] === lastLine) count++;
+    }
+    if (count >= 5) return true;
+  }
+  return false;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -280,7 +449,6 @@ export default {
       });
     }
 
-    // Remote App Status (Maintenance Mode, Broadcast Banner, Feature Flags)
     if (request.method === "GET" && url.pathname === "/v1/app/status") {
       const cfg = await loadConfig(env);
       return jsonResponse({
@@ -387,6 +555,21 @@ export default {
       }
     }
 
+    if (request.method === "POST" && url.pathname === "/api/admin/test-search") {
+      if (!verifyAdmin(request, env)) return jsonResponse({ error: "كلمة مرور الإدارة غير صحيحة" }, 401);
+      const cfg = await loadConfig(env);
+      const start = Date.now();
+      const res = await runAutoWebSearch("latest AI news 2026", cfg.searchApiKey, cfg.searchApiUrl, cfg.models["cintra-pro"]?.apiKey);
+      const latencyMs = Date.now() - start;
+      return jsonResponse({
+        ok: Boolean(res.text),
+        latencyMs,
+        provider: res.provider,
+        sourcesCount: res.sources.length,
+        preview: (res.text || "").slice(0, 180)
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/v1/images/generate") {
       if (!verifyAppToken(request, env)) return jsonResponse({ error: "Unauthorized" }, 401);
       const { prompt } = await request.json();
@@ -450,22 +633,32 @@ export default {
         Promise.race([promise, new Promise((res) => setTimeout(() => res(fallback), ms))]);
 
       const shouldSearch = cfg.features?.webSearch !== false && needsAutoWebSearch(lastUserPrompt, body.tool, body.autoWebSearch !== false);
-      const [urlContext, searchRes, prefetchedPhotos] = await Promise.all([
-        withTimeout(fetchUrlContext(lastUserPrompt), 2800, ""),
-        shouldSearch ? withTimeout(runAutoWebSearch(lastUserPrompt, cfg.searchApiKey, cfg.searchApiUrl), 2800, { text: "", sources: [] }) : Promise.resolve({ text: "", sources: [] }),
-        cfg.features?.visuals !== false && body.illustrativeImages !== false ? withTimeout(fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey), 2200, []) : Promise.resolve([])
+      const hasUrls = extractUrlsFromText(lastUserPrompt).length > 0;
+      const fallbackApiKey = cfg.models["cintra-pro"]?.apiKey || route.apiKey || "";
+
+      const [urlRes, searchRes, prefetchedPhotos] = await Promise.all([
+        hasUrls ? withTimeout(fetchUrlContext(lastUserPrompt), 6500, { text: "", sources: [] }) : Promise.resolve({ text: "", sources: [] }),
+        shouldSearch ? withTimeout(runAutoWebSearch(lastUserPrompt, cfg.searchApiKey, cfg.searchApiUrl, fallbackApiKey), 6500, { text: "", sources: [] }) : Promise.resolve({ text: "", sources: [] }),
+        cfg.features?.visuals !== false && body.illustrativeImages !== false ? withTimeout(fetchRealWebPhotos(lastUserPrompt, cfg.searchApiKey), 2600, []) : Promise.resolve([])
       ]);
 
       let webContext = "";
-      let webSources = Array.isArray(searchRes?.sources) ? searchRes.sources : [];
-      if (urlContext) webContext += urlContext + "\n\n";
-      if (searchRes?.text) webContext += searchRes.text;
+      const seenUrls = new Set();
+      const webSources = [];
+      for (const s of [...(urlRes?.sources || []), ...(searchRes?.sources || [])]) {
+        if (s && s.url && !seenUrls.has(s.url)) {
+          seenUrls.add(s.url);
+          webSources.push(s);
+        }
+      }
+      if (urlRes?.text) webContext += "=== READ URL CONTENT ===\n" + urlRes.text + "\n\n";
+      if (searchRes?.text) webContext += "=== LIVE WEB SEARCH RESULTS ===\n" + searchRes.text;
 
       const fullSystem = [
         route.systemPrompt || "",
         body.customInstructions ? "\nUser Custom Instructions:\n" + body.customInstructions : "",
         body.generativeUi !== false ? SMART_UI_DIRECTIVE : "",
-        webContext ? "\nLive Web & Video Context:\n" + webContext : ""
+        webContext ? "\nLive Web & URL Context (Use these verified facts directly):\n" + webContext : ""
       ].filter(Boolean).join("\n");
 
       const upstreamResp = await fetch(route.baseUrl.replace(/\/+$/, "") + "/chat/completions", {
@@ -488,12 +681,19 @@ export default {
       }
 
       const webPhotos = prefetchedPhotos || [];
+      const stripCjk = !userWantsCjk(lastUserPrompt);
+
       if (upstreamResp.body) {
         const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
         const stream = new ReadableStream({
           async start(controller) {
-            if (webContext) {
-              controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_status: "تم البحث والتحقق • جارٍ كتابة الإجابة..." }) + "\n\n"));
+            if (urlRes?.text && searchRes?.text) {
+              controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_status: "تمت قراءة الروابط والبحث في الويب • جارٍ الكتابة..." }) + "\n\n"));
+            } else if (urlRes?.text) {
+              controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_status: "تمت قراءة الرابط بنجاح • جارٍ التحليل..." }) + "\n\n"));
+            } else if (searchRes?.text) {
+              controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_status: "تم البحث في الويب • جارٍ صياغة الإجابة..." }) + "\n\n"));
             }
             if (webSources.length > 0) {
               controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_sources: webSources }) + "\n\n"));
@@ -501,12 +701,71 @@ export default {
             if (webPhotos.length > 0) {
               controller.enqueue(encoder.encode("data: " + JSON.stringify({ cintra_photos: webPhotos }) + "\n\n"));
             }
+
             const reader = upstreamResp.body.getReader();
+            let sseBuf = "";
+            let rollingContent = "";
+            let checkCounter = 0;
+            let loopBroken = false;
+
             try {
               while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                controller.enqueue(value);
+                sseBuf += decoder.decode(value, { stream: true });
+                const lines = sseBuf.split("\n");
+                sseBuf = lines.pop() || "";
+
+                for (const rawLine of lines) {
+                  const line = rawLine.trim();
+                  if (!line) continue;
+                  if (line === "data: [DONE]") {
+                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                    continue;
+                  }
+                  if (!line.startsWith("data:")) {
+                    controller.enqueue(encoder.encode(rawLine + "\n"));
+                    continue;
+                  }
+                  const payloadStr = line.slice(5).trim();
+                  if (!payloadStr) continue;
+                  try {
+                    const parsed = JSON.parse(payloadStr);
+                    const delta = parsed?.choices?.[0]?.delta;
+                    if (delta) {
+                      if (stripCjk && typeof delta.content === "string" && CJK_REGEX.test(delta.content)) {
+                        delta.content = delta.content.replace(CJK_REGEX, "");
+                      }
+                      if (stripCjk && typeof delta.reasoning_content === "string" && CJK_REGEX.test(delta.reasoning_content)) {
+                        delta.reasoning_content = delta.reasoning_content.replace(CJK_REGEX, "");
+                      }
+                      if (typeof delta.content === "string" && delta.content.length > 0) {
+                        rollingContent += delta.content;
+                        if (rollingContent.length > 2600) rollingContent = rollingContent.slice(-2200);
+                        checkCounter += delta.content.length;
+                        if (checkCounter >= 75) {
+                          checkCounter = 0;
+                          if (isStuckInLoop(rollingContent)) {
+                            loopBroken = true;
+                            const closeFence = (rollingContent.split("```").length % 2 === 0) ? "\n```" : "";
+                            if (closeFence) {
+                              controller.enqueue(encoder.encode("data: " + JSON.stringify({
+                                choices: [{ delta: { content: closeFence } }]
+                              }) + "\n\n"));
+                            }
+                            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                            try { await reader.cancel(); } catch (_e) {}
+                            break;
+                          }
+                        }
+                      }
+                    }
+                    controller.enqueue(encoder.encode("data: " + JSON.stringify(parsed) + "\n\n"));
+                  } catch (_e) {
+                    controller.enqueue(encoder.encode(rawLine + "\n\n"));
+                  }
+                }
+                if (loopBroken) break;
               }
             } finally {
               controller.close();
@@ -596,7 +855,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
   <div class="app" id="appView">
     <div class="topbar">
       <div class="row">
-        <strong style="font-size:17px;">Cintra Control Center</strong>
+        <strong style="font-size:17px;">Cintra Control Center v25</strong>
         <span id="kvStatus" class="badge-ok"></span>
       </div>
       <div class="row">
@@ -628,10 +887,15 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
           <div class="field"><label>Image API Key (اتركه فارغاً لاستخدام مفتاح Cintra Pro)</label><input id="imgApiKey" type="password" dir="ltr" placeholder="sk-..." /></div>
         </div>
         <div class="card">
-          <h3 style="margin:0 0 8px;">محرك البحث المباشر (Tavily Search API)</h3>
-          <div class="field"><label>Search API URL (افتراضي: Tavily أو رابط محركك)</label><input id="searchApiUrl" dir="ltr" placeholder="https://api.tavily.com/search" /></div>
-          <div class="field"><label>Search API Key (اتركه فارغاً للإبقاء على المفتاح المحفوظ)</label><input id="searchApiKey" type="password" dir="ltr" placeholder="tvly-..." /></div>
+          <div class="row" style="margin-bottom:8px;">
+            <h3 style="margin:0;">محرك البحث المباشر (Web Search API)</h3>
+            <button class="btn btn-soft" style="padding:6px 12px;font-size:12px;" id="testSearchBtn">اختبار البحث</button>
+          </div>
+          <p style="margin:0 0 10px;color:var(--muted);font-size:12.5px;">يدعم Nexora (/v1/search) وTavily وSerper وأي محرك بحث JSON (مع إرسال Bearer + api_key تلقائياً).</p>
+          <div class="field"><label>Search API URL</label><input id="searchApiUrl" dir="ltr" placeholder="https://nexora-llm.onrender.com/v1/search" /></div>
+          <div class="field"><label>Search API Key (اتركه فارغاً لاستخدام مفتاح Cintra Pro أو المحفوظ)</label><input id="searchApiKey" type="password" dir="ltr" placeholder="sk-... / tvly-..." /></div>
           <div id="searchMasked" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+          <div id="searchTestRes" style="font-size:12px;margin-top:8px;"></div>
         </div>
       </div>
 
@@ -660,7 +924,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
             <input type="checkbox" id="annEnabled" style="width:22px;height:22px;" />
           </div>
           <div class="field"><label>عنوان الإشعار</label><input id="annTitle" placeholder="تحديث جديد في Cintra" /></div>
-          <div class="field"><label>نص الإشعار</label><textarea id="annMsg" rows="3" placeholder="أضفنا ميزة المخططات التفاعلية وتوليد PDF المحسّن!"></textarea></div>
+          <div class="field"><label>نص الإشعار</label><textarea id="annMsg" rows="3" placeholder="أضفنا التصميم الحي وتوليد الباوربوينت والبحث المحسّن!"></textarea></div>
         </div>
       </div>
 
@@ -765,6 +1029,21 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
       }
     });
 
+    document.getElementById('testSearchBtn').onclick = async function() {
+      var out = document.getElementById('searchTestRes');
+      out.style.color = 'var(--accent)';
+      out.textContent = 'جارٍ اختبار البحث...';
+      var r = await fetch('/api/admin/test-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': adminSecret }
+      });
+      var d = await r.json();
+      out.style.color = d.ok ? 'var(--ok)' : 'var(--err)';
+      out.textContent = d.ok
+        ? ('✓ ناجح (' + d.latencyMs + 'ms • ' + d.sourcesCount + ' مصادر • ' + d.provider + ')')
+        : ('✗ لم يرجع نتائج (' + d.latencyMs + 'ms) — تأكد من رابط ومفتاح البحث');
+    };
+
     async function loadDashboard(secret) {
       var res = await fetch('/api/admin/config', { headers: { 'X-Admin-Secret': secret } });
       var data = await res.json();
@@ -784,7 +1063,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
       document.getElementById('imgBaseUrl').value = (data.imageApi && data.imageApi.baseUrl) || '';
       document.getElementById('imgModelId').value = (data.imageApi && data.imageApi.modelId) || 'auto';
       document.getElementById('searchApiUrl').value = data.searchApiUrl || 'https://api.tavily.com/search';
-      document.getElementById('searchMasked').textContent = data.hasSearchKey ? ('المفتاح المحفوظ: ' + data.searchKeyMasked) : 'لا يوجد مفتاح بحث محفوظ';
+      document.getElementById('searchMasked').textContent = data.hasSearchKey ? ('المفتاح المحفوظ: ' + data.searchKeyMasked) : 'لا يوجد مفتاح مخصص (سيستخدم مفتاح Cintra Pro تلقائياً عند الحاجة)';
       document.getElementById('maintEnabled').checked = Boolean(data.maintenance && data.maintenance.enabled);
       document.getElementById('maintMsg').value = (data.maintenance && data.maintenance.message) || '';
       document.getElementById('annEnabled').checked = Boolean(data.announcement && data.announcement.enabled);

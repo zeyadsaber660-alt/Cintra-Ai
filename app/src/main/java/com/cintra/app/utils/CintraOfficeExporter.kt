@@ -11,9 +11,25 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+data class PptxThemeData(
+    val bg: String = "0F172A",
+    val slideBg: String = "F8FAFC",
+    val headerBg: String = "0F172A",
+    val accent: String = "0EA5E9",
+    val accent2: String = "10B981",
+    val cardBg: String = "FFFFFF",
+    val text: String = "1E293B",
+    val subtext: String = "64748B",
+)
+
 data class PptxSlideData(
     val title: String,
     val bullets: List<String>,
+    val layout: String = "cards", // cover, cards, two_column, stats, timeline, bullets, closing
+    val subtitle: String = "",
+    val leftTitle: String = "",
+    val rightTitle: String = "",
+    val accentOverride: String? = null,
 )
 
 data class DocxSectionData(
@@ -22,11 +38,10 @@ data class DocxSectionData(
 )
 
 /**
- * Pure-Kotlin Studio-Grade OpenXML generator for `.pptx` (PowerPoint) and `.docx` (Word).
- * PowerPoint decks feature:
- *  - Deep Navy (#0B1120) executive cover & closing bookend slides with Sky (#0EA5E9) accent geometry
- *  - Clean Alabaster (#F8FAFC) content slides with top Navy header bar, numbered slide badge,
- *    styled white content cards with left Sky accent strips, and bottom footer bar.
+ * Pure-Kotlin Creative OpenXML generator for `.pptx` (PowerPoint) and `.docx` (Word).
+ * v25: Zero rigid theme lock-in — dynamically applies the model's chosen color palette
+ * and per-slide layout (`cover`, `cards`, `two_column`, `stats`, `timeline`, `bullets`, `closing`)
+ * with full Arabic RTL & English LTR support.
  */
 object CintraOfficeExporter {
 
@@ -37,11 +52,26 @@ object CintraOfficeExporter {
         .replace("\"", "&quot;")
         .replace("'", "&apos;")
 
+    private fun cleanHex(raw: String?, fallback: String): String {
+        val c = raw.orEmpty().trim().removePrefix("#").uppercase()
+        return if (c.length == 6 && c.all { it in '0'..'9' || it in 'A'..'F' }) c else fallback
+    }
+
+    private fun isDarkHex(hex: String): Boolean {
+        val h = cleanHex(hex, "0F172A")
+        val r = h.substring(0, 2).toInt(16)
+        val g = h.substring(2, 4).toInt(16)
+        val b = h.substring(4, 6).toInt(16)
+        val luma = (0.299 * r + 0.587 * g + 0.114 * b)
+        return luma < 140.0
+    }
+
     fun savePptxToDownloads(
         context: Context,
         title: String,
         slides: List<PptxSlideData>,
         fileName: String,
+        theme: PptxThemeData = PptxThemeData(),
         onSuccess: (Uri, String) -> Unit,
         onError: (String) -> Unit,
     ) {
@@ -50,8 +80,8 @@ object CintraOfficeExporter {
             try {
                 val safeBase = fileName.removeSuffix(".pptx").replace(Regex("[^\\p{L}\\p{N}_\\- ]"), "_").trim().ifBlank { "Cintra_Presentation" }
                 val finalName = "$safeBase.pptx"
-                val allSlides = if (slides.isEmpty()) listOf(PptxSlideData(title, listOf("Created by Cintra AI"))) else slides
-                val bytes = buildPptxBytes(title, allSlides)
+                val allSlides = if (slides.isEmpty()) listOf(PptxSlideData(title, listOf("Created by Cintra AI"), layout = "cover")) else slides
+                val bytes = buildPptxBytes(title, allSlides, theme)
                 val uri = writeDownloadsFile(
                     context = context,
                     fileName = finalName,
@@ -70,6 +100,7 @@ object CintraOfficeExporter {
         title: String,
         sections: List<DocxSectionData>,
         fileName: String,
+        accentHex: String = "0284C7",
         onSuccess: (Uri, String) -> Unit,
         onError: (String) -> Unit,
     ) {
@@ -78,7 +109,7 @@ object CintraOfficeExporter {
             try {
                 val safeBase = fileName.removeSuffix(".docx").replace(Regex("[^\\p{L}\\p{N}_\\- ]"), "_").trim().ifBlank { "Cintra_Document" }
                 val finalName = "$safeBase.docx"
-                val bytes = buildDocxBytes(title, sections)
+                val bytes = buildDocxBytes(title, sections, cleanHex(accentHex, "0284C7"))
                 val uri = writeDownloadsFile(
                     context = context,
                     fileName = finalName,
@@ -128,7 +159,20 @@ object CintraOfficeExporter {
       </p:sp>"""
     }
 
-    private fun buildPptxBytes(deckTitle: String, slides: List<PptxSlideData>): ByteArray {
+    private fun buildPptxBytes(deckTitle: String, slides: List<PptxSlideData>, rawTheme: PptxThemeData): ByteArray {
+        val coverBg = cleanHex(rawTheme.bg, "0F172A")
+        val slideBg = cleanHex(rawTheme.slideBg, "F8FAFC")
+        val headerBg = cleanHex(rawTheme.headerBg, coverBg)
+        val accent1 = cleanHex(rawTheme.accent, "0EA5E9")
+        val accent2 = cleanHex(rawTheme.accent2, "10B981")
+        val cardBg = cleanHex(rawTheme.cardBg, if (isDarkHex(slideBg)) "1E293B" else "FFFFFF")
+        val cardBorder = if (isDarkHex(slideBg)) "334155" else "E2E8F0"
+        val bodyText = cleanHex(rawTheme.text, if (isDarkHex(cardBg)) "F1F5F9" else "1E293B")
+        val subText = cleanHex(rawTheme.subtext, if (isDarkHex(slideBg)) "94A3B8" else "64748B")
+        val coverTitleColor = if (isDarkHex(coverBg)) "FFFFFF" else "0F172A"
+        val coverSubColor = if (isDarkHex(coverBg)) "CBD5E1" else "475569"
+        val headerTextColor = if (isDarkHex(headerBg)) "FFFFFF" else "0F172A"
+
         val baos = ByteArrayOutputStream()
         ZipOutputStream(baos).use { zos ->
             fun putEntry(path: String, xml: String) {
@@ -221,90 +265,170 @@ $presRels
             )
 
             slides.forEachIndexed { idx, slide ->
-                val isCover = idx == 0
-                val isClosing = idx == slides.lastIndex && slides.size > 2
+                val layout = slide.layout.lowercase().trim()
+                val isCover = layout == "cover" || idx == 0
+                val isClosing = layout == "closing" || (idx == slides.lastIndex && slides.size > 2 && layout == "cards" && slide.bullets.size <= 2)
+                val slideAccent = cleanHex(slide.accentOverride, accent1)
+                val isRtl = slide.title.any { it in '\u0600'..'\u06FF' }
+                val rtlAttr = if (isRtl) """ rtl="1" algn="r"""" else ""
                 val shapes = StringBuilder()
-                val bgHex = if (isCover || isClosing) "0B1120" else "F8FAFC"
+                val bgHex = if (isCover || isClosing) coverBg else slideBg
 
                 if (isCover || isClosing) {
-                    // Geometric executive dark cover/closing slide
-                    shapes.append(rectShape(2, "SidePanel", 8600000L, 0L, 3592000L, 6858000L, "111C33"))
-                    shapes.append(rectShape(3, "AccentBar", 685800L, 1420000L, 1100000L, 85000L, "0EA5E9", rounded = true))
+                    shapes.append(rectShape(2, "AccentStrip", 0L, 0L, 260000L, 6858000L, slideAccent))
+                    shapes.append(rectShape(3, "AccentPill", 720000L, 1280000L, 1200000L, 85000L, accent2, rounded = true))
                     shapes.append(
                         textShape(
-                            4, "Badge", 685800L, 1020000L, 4500000L, 360000L,
-                            """<a:p><a:r><a:rPr lang="en-US" sz="1300" b="1"><a:solidFill><a:srgbClr val="38BDF8"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>CINTRA AI PRESENTATION</a:t></a:r></a:p>""",
+                            4, "CoverTitle", 720000L, 1580000L, 10400000L, 1850000L,
+                            """<a:p><a:pPr$rtlAttr/><a:r><a:rPr lang="en-US" sz="4200" b="1"><a:solidFill><a:srgbClr val="$coverTitleColor"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r></a:p>""",
                         ),
                     )
-                    shapes.append(
-                        textShape(
-                            5, "CoverTitle", 685800L, 1680000L, 7600000L, 1750000L,
-                            """<a:p><a:r><a:rPr lang="en-US" sz="4200" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r></a:p>""",
-                        ),
-                    )
-                    val subXml = slide.bullets.take(3).joinToString("") { b ->
-                        """<a:p><a:pPr spcAft="12000"/><a:r><a:rPr lang="en-US" sz="1900"><a:solidFill><a:srgbClr val="CBD5E1"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(b)}</a:t></a:r></a:p>"""
+                    val subLines = buildList {
+                        if (slide.subtitle.isNotBlank()) add(slide.subtitle)
+                        addAll(slide.bullets.take(3))
                     }
-                    shapes.append(textShape(6, "CoverSub", 685800L, 3620000L, 7600000L, 2200000L, subXml))
-                    shapes.append(rectShape(7, "BottomLine", 685800L, 6150000L, 10820400L, 18000L, "1E293B"))
+                    val subXml = subLines.joinToString("") { b ->
+                        """<a:p><a:pPr$rtlAttr spcAft="12000"/><a:r><a:rPr lang="en-US" sz="1950"><a:solidFill><a:srgbClr val="$coverSubColor"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(b)}</a:t></a:r></a:p>"""
+                    }
+                    shapes.append(textShape(5, "CoverSub", 720000L, 3550000L, 10400000L, 2300000L, subXml))
+                    shapes.append(rectShape(6, "BottomBar", 720000L, 6180000L, 10750000L, 22000L, slideAccent))
                 } else {
-                    // Top Navy Executive Header Band + Slide Number Badge
-                    shapes.append(rectShape(2, "HeaderBand", 0L, 0L, 12192000L, 1220000L, "0F172A"))
-                    shapes.append(rectShape(3, "HeaderAccent", 0L, 1220000L, 12192000L, 55000L, "0EA5E9"))
-                    shapes.append(rectShape(4, "NumBadge", 10700000L, 310000L, 860000L, 580000L, "0284C7", rounded = true))
+                    // Header Band
+                    shapes.append(rectShape(2, "HeaderBand", 0L, 0L, 12192000L, 1180000L, headerBg))
+                    shapes.append(rectShape(3, "HeaderAccent", 0L, 1180000L, 12192000L, 52000L, slideAccent))
+                    shapes.append(rectShape(4, "NumBadge", 10750000L, 300000L, 840000L, 560000L, slideAccent, rounded = true))
                     shapes.append(
                         textShape(
-                            5, "NumText", 10700000L, 380000L, 860000L, 440000L,
-                            """<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="1800" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr><a:t>${"%02d".format(idx + 1)}</a:t></a:r></a:p>""",
+                            5, "NumText", 10750000L, 365000L, 840000L, 420000L,
+                            """<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="1750" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr><a:t>${"%02d".format(idx + 1)}</a:t></a:r></a:p>""",
                         ),
                     )
                     shapes.append(
                         textShape(
-                            6, "SlideTitle", 580000L, 260000L, 9800000L, 720000L,
-                            """<a:p><a:r><a:rPr lang="en-US" sz="2800" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r></a:p>""",
+                            6, "SlideTitle", 580000L, 250000L, 9850000L, 700000L,
+                            """<a:p><a:pPr$rtlAttr/><a:r><a:rPr lang="en-US" sz="2800" b="1"><a:solidFill><a:srgbClr val="$headerTextColor"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r></a:p>""",
                         ),
                     )
 
-                    // Styled White Content Cards (1 card per bullet up to 4 cards, or 1 grouped card if > 4)
-                    val bullets = slide.bullets.ifEmpty { listOf("Key insights for ${slide.title}") }
+                    val bullets = slide.bullets.ifEmpty { listOf(slide.subtitle.ifBlank { slide.title }) }
                     var nextId = 10
-                    if (bullets.size <= 4) {
-                        val cardCount = bullets.size
-                        val startY = 1580000L
-                        val totalH = 4450000L
-                        val gap = 160000L
-                        val cardH = (totalH - gap * (cardCount - 1)) / cardCount
-                        bullets.forEachIndexed { bIdx, bullet ->
-                            val cy = startY + bIdx * (cardH + gap)
-                            val accentCol = when (bIdx % 3) {
-                                0 -> "0284C7"
-                                1 -> "059669"
-                                else -> "D97706"
+
+                    when (layout) {
+                        "stats" -> {
+                            val items = bullets.take(3)
+                            val colW = (11032000L - (items.size - 1) * 240000L) / items.size
+                            items.forEachIndexed { i, raw ->
+                                val parts = raw.split("|", ":", limit = 2)
+                                val bigVal = parts.firstOrNull()?.trim().orEmpty()
+                                val label = parts.getOrNull(1)?.trim().orEmpty()
+                                val cx = 580000L + i * (colW + 240000L)
+                                val barColor = if (i % 2 == 0) slideAccent else accent2
+                                shapes.append(rectShape(nextId++, "StatCard$i", cx, 1720000L, colW, 3850000L, cardBg, borderHex = cardBorder, rounded = true))
+                                shapes.append(rectShape(nextId++, "StatTop$i", cx, 1720000L, colW, 120000L, barColor))
+                                shapes.append(
+                                    textShape(
+                                        nextId++, "StatVal$i", cx + 180000L, 2280000L, colW - 360000L, 1250000L,
+                                        """<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="4000" b="1"><a:solidFill><a:srgbClr val="$barColor"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(bigVal)}</a:t></a:r></a:p>""",
+                                    ),
+                                )
+                                shapes.append(
+                                    textShape(
+                                        nextId++, "StatLbl$i", cx + 180000L, 3650000L, colW - 360000L, 1500000L,
+                                        """<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="1850"><a:solidFill><a:srgbClr val="$bodyText"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(label.ifBlank { bigVal })}</a:t></a:r></a:p>""",
+                                    ),
+                                )
                             }
-                            shapes.append(rectShape(nextId++, "CardBg$bIdx", 580000L, cy, 11032000L, cardH, "FFFFFF", borderHex = "E2E8F0", rounded = true))
-                            shapes.append(rectShape(nextId++, "CardBar$bIdx", 580000L, cy + 90000L, 95000L, (cardH - 180000L).coerceAtLeast(180000L), accentCol, rounded = true))
-                            shapes.append(
-                                textShape(
-                                    nextId++, "CardTxt$bIdx", 840000L, cy + 120000L, 10520000L, (cardH - 220000L).coerceAtLeast(220000L),
-                                    """<a:p><a:r><a:rPr lang="en-US" sz="1900"><a:solidFill><a:srgbClr val="1E293B"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(bullet)}</a:t></a:r></a:p>""",
-                                ),
-                            )
                         }
-                    } else {
-                        shapes.append(rectShape(nextId++, "MainCard", 580000L, 1580000L, 11032000L, 4500000L, "FFFFFF", borderHex = "E2E8F0", rounded = true))
-                        shapes.append(rectShape(nextId++, "MainBar", 580000L, 1740000L, 95000L, 4180000L, "0284C7", rounded = true))
-                        val pXml = bullets.joinToString("") { b ->
-                            """<a:p><a:pPr marL="240000" indent="-150000" spcAft="14000"><a:buChar char="▪"/></a:pPr><a:r><a:rPr lang="en-US" sz="1750"><a:solidFill><a:srgbClr val="1E293B"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(b)}</a:t></a:r></a:p>"""
+
+                        "two_column" -> {
+                            val mid = (bullets.size + 1) / 2
+                            val leftItems = bullets.take(mid)
+                            val rightItems = bullets.drop(mid)
+                            val colW = 5380000L
+                            listOf(
+                                Triple(580000L, slide.leftTitle.ifBlank { "Key Highlights" }, Pair(leftItems, slideAccent)),
+                                Triple(6232000L, slide.rightTitle.ifBlank { "Details & Impact" }, Pair(rightItems, accent2)),
+                            ).forEachIndexed { colIdx, (cx, colHead, pair) ->
+                                val (colBullets, colAccent) = pair
+                                shapes.append(rectShape(nextId++, "ColCard$colIdx", cx, 1540000L, colW, 4520000L, cardBg, borderHex = cardBorder, rounded = true))
+                                shapes.append(rectShape(nextId++, "ColTop$colIdx", cx, 1540000L, colW, 110000L, colAccent))
+                                shapes.append(
+                                    textShape(
+                                        nextId++, "ColHead$colIdx", cx + 220000L, 1780000L, colW - 440000L, 520000L,
+                                        """<a:p><a:pPr$rtlAttr/><a:r><a:rPr lang="en-US" sz="2100" b="1"><a:solidFill><a:srgbClr val="$colAccent"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(colHead)}</a:t></a:r></a:p>""",
+                                    ),
+                                )
+                                val pXml = colBullets.joinToString("") { b ->
+                                    """<a:p><a:pPr$rtlAttr spcAft="14000"/><a:r><a:rPr lang="en-US" sz="1750"><a:solidFill><a:srgbClr val="$bodyText"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>• ${xmlEscape(b)}</a:t></a:r></a:p>"""
+                                }
+                                shapes.append(textShape(nextId++, "ColBody$colIdx", cx + 220000L, 2400000L, colW - 440000L, 3450000L, pXml))
+                            }
                         }
-                        shapes.append(textShape(nextId++, "MainTxt", 850000L, 1740000L, 10500000L, 4180000L, pXml))
+
+                        "timeline" -> {
+                            val steps = bullets.take(4)
+                            val colW = (11032000L - (steps.size - 1) * 180000L) / steps.size
+                            shapes.append(rectShape(nextId++, "TimeTrack", 580000L, 2150000L, 11032000L, 55000L, slideAccent))
+                            steps.forEachIndexed { i, step ->
+                                val cx = 580000L + i * (colW + 180000L)
+                                val nodeColor = if (i % 2 == 0) slideAccent else accent2
+                                shapes.append(rectShape(nextId++, "StepNum$i", cx + (colW / 2) - 340000L, 1840000L, 680000L, 680000L, nodeColor, rounded = true))
+                                shapes.append(
+                                    textShape(
+                                        nextId++, "StepN$i", cx + (colW / 2) - 340000L, 1960000L, 680000L, 450000L,
+                                        """<a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US" sz="2000" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr><a:t>${i + 1}</a:t></a:r></a:p>""",
+                                    ),
+                                )
+                                shapes.append(rectShape(nextId++, "StepCard$i", cx, 2760000L, colW, 3150000L, cardBg, borderHex = cardBorder, rounded = true))
+                                shapes.append(
+                                    textShape(
+                                        nextId++, "StepTxt$i", cx + 160000L, 2980000L, colW - 320000L, 2700000L,
+                                        """<a:p><a:pPr$rtlAttr/><a:r><a:rPr lang="en-US" sz="1700"><a:solidFill><a:srgbClr val="$bodyText"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(step)}</a:t></a:r></a:p>""",
+                                    ),
+                                )
+                            }
+                        }
+
+                        else -> {
+                            // Dynamic cards (<=4 bullets) or clean grouped list (>4 bullets)
+                            if (bullets.size <= 4 && layout != "bullets") {
+                                val cardCount = bullets.size
+                                val startY = 1540000L
+                                val totalH = 4480000L
+                                val gap = 160000L
+                                val cardH = (totalH - gap * (cardCount - 1)) / cardCount
+                                bullets.forEachIndexed { bIdx, bullet ->
+                                    val cy = startY + bIdx * (cardH + gap)
+                                    val barCol = if (bIdx % 2 == 0) slideAccent else accent2
+                                    shapes.append(rectShape(nextId++, "CardBg$bIdx", 580000L, cy, 11032000L, cardH, cardBg, borderHex = cardBorder, rounded = true))
+                                    val barX = if (isRtl) 580000L + 11032000L - 95000L else 580000L
+                                    shapes.append(rectShape(nextId++, "CardBar$bIdx", barX, cy + 85000L, 95000L, (cardH - 170000L).coerceAtLeast(160000L), barCol, rounded = true))
+                                    val txtX = if (isRtl) 740000L else 840000L
+                                    shapes.append(
+                                        textShape(
+                                            nextId++, "CardTxt$bIdx", txtX, cy + 110000L, 10450000L, (cardH - 200000L).coerceAtLeast(200000L),
+                                            """<a:p><a:pPr$rtlAttr/><a:r><a:rPr lang="en-US" sz="1900"><a:solidFill><a:srgbClr val="$bodyText"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(bullet)}</a:t></a:r></a:p>""",
+                                        ),
+                                    )
+                                }
+                            } else {
+                                shapes.append(rectShape(nextId++, "MainCard", 580000L, 1540000L, 11032000L, 4520000L, cardBg, borderHex = cardBorder, rounded = true))
+                                val barX = if (isRtl) 580000L + 11032000L - 95000L else 580000L
+                                shapes.append(rectShape(nextId++, "MainBar", barX, 1700000L, 95000L, 4200000L, slideAccent, rounded = true))
+                                val pXml = bullets.joinToString("") { b ->
+                                    """<a:p><a:pPr$rtlAttr spcAft="14000"/><a:r><a:rPr lang="en-US" sz="1750"><a:solidFill><a:srgbClr val="$bodyText"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>▪ ${xmlEscape(b)}</a:t></a:r></a:p>"""
+                                }
+                                shapes.append(textShape(nextId++, "MainTxt", 840000L, 1700000L, 10450000L, 4200000L, pXml))
+                            }
+                        }
                     }
 
                     // Bottom Footer
-                    shapes.append(rectShape(nextId++, "FooterLine", 580000L, 6280000L, 11032000L, 15000L, "CBD5E1"))
+                    shapes.append(rectShape(nextId++, "FooterLine", 580000L, 6280000L, 11032000L, 15000L, cardBorder))
                     shapes.append(
                         textShape(
                             nextId++, "FooterTxt", 580000L, 6340000L, 9000000L, 380000L,
-                            """<a:p><a:r><a:rPr lang="en-US" sz="1100"><a:solidFill><a:srgbClr val="64748B"/></a:solidFill></a:rPr><a:t>${xmlEscape(deckTitle)}  •  Cintra AI</a:t></a:r></a:p>""",
+                            """<a:p><a:r><a:rPr lang="en-US" sz="1100"><a:solidFill><a:srgbClr val="$subText"/></a:solidFill></a:rPr><a:t>${xmlEscape(deckTitle)}  •  Cintra AI</a:t></a:r></a:p>""",
                         ),
                     )
                 }
@@ -333,7 +457,7 @@ $shapes
         return baos.toByteArray()
     }
 
-    private fun buildDocxBytes(docTitle: String, sections: List<DocxSectionData>): ByteArray {
+    private fun buildDocxBytes(docTitle: String, sections: List<DocxSectionData>, accentHex: String): ByteArray {
         val baos = ByteArrayOutputStream()
         ZipOutputStream(baos).use { zos ->
             fun putEntry(path: String, xml: String) {
@@ -363,10 +487,10 @@ $shapes
             val bidiTag = if (isArabic) "<w:bidi/>" else ""
 
             val bodyParts = StringBuilder()
-            bodyParts.append("""<w:p><w:pPr>$bidiTag<w:shd w:val="clear" w:color="auto" w:fill="0F172A"/><w:spacing w:before="120" w:after="260"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="40"/></w:rPr><w:t>  ${xmlEscape(docTitle)}  </w:t></w:r></w:p>""")
+            bodyParts.append("""<w:p><w:pPr>$bidiTag<w:shd w:val="clear" w:color="auto" w:fill="$accentHex"/><w:spacing w:before="120" w:after="260"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="40"/></w:rPr><w:t>  ${xmlEscape(docTitle)}  </w:t></w:r></w:p>""")
             sections.forEach { sec ->
                 if (sec.heading.isNotBlank()) {
-                    bodyParts.append("""<w:p><w:pPr>$bidiTag<w:pBdr><w:bottom w:val="single" w:sz="8" w:space="4" w:color="0284C7"/></w:pBdr><w:spacing w:before="220" w:after="110"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="0369A1"/><w:sz w:val="28"/></w:rPr><w:t>${xmlEscape(sec.heading)}</w:t></w:r></w:p>""")
+                    bodyParts.append("""<w:p><w:pPr>$bidiTag<w:pBdr><w:bottom w:val="single" w:sz="8" w:space="4" w:color="$accentHex"/></w:pBdr><w:spacing w:before="220" w:after="110"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="$accentHex"/><w:sz w:val="28"/></w:rPr><w:t>${xmlEscape(sec.heading)}</w:t></w:r></w:p>""")
                 }
                 sec.paragraphs.forEach { p ->
                     bodyParts.append("""<w:p><w:pPr>$bidiTag<w:spacing w:after="130"/></w:pPr><w:r><w:rPr><w:color w:val="1E293B"/><w:sz w:val="23"/></w:rPr><w:t>${xmlEscape(p)}</w:t></w:r></w:p>""")
