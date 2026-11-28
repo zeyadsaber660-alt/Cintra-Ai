@@ -1,6 +1,8 @@
 package com.cintra.app.ui.theme
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -24,14 +27,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -113,7 +117,7 @@ fun CintraGlassToastHost(modifier: Modifier = Modifier) {
 }
 
 /**
- * Unified Frosted Liquid Glass Modal Dialog for confirmations, previews, and alerts.
+ * Unified Frosted Liquid Glass Modal Dialog with smooth spring scale+fade entrance.
  */
 @Composable
 fun CintraGlassDialog(
@@ -128,6 +132,10 @@ fun CintraGlassDialog(
 ) {
     val palette = CintraThemePalette
     val shape = RoundedCornerShape(26.dp)
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        anim.animateTo(1f, spring(dampingRatio = 0.76f, stiffness = 500f))
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -137,9 +145,17 @@ fun CintraGlassDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .shadow(28.dp, shape, spotColor = Color.Black.copy(alpha = 0.4f))
+                .graphicsLayer {
+                    val p = anim.value
+                    alpha = p.coerceIn(0f, 1f)
+                    val sc = 0.90f + 0.10f * p
+                    scaleX = sc
+                    scaleY = sc
+                    translationY = (1f - p) * 20f
+                }
+                .shadow(28.dp, shape, spotColor = Color.Black.copy(alpha = 0.36f))
                 .clip(shape)
-                .background(if (palette.isDark) Color(0xF2141923) else Color(0xF7FFFFFF))
+                .background(if (palette.isDark) Color(0xF2141923) else Color(0xFAFFFFFF))
                 .border(1.dp, palette.borderSubtle, shape)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -219,9 +235,8 @@ fun CintraGlassDialog(
     }
 }
 
-
 /**
- * ChatGPT-style 24dp rounded floating popup menu (matches 8516.png & 8517.png).
+ * ChatGPT-style 24dp rounded floating popup menu with buttery spring scale+fade entrance.
  */
 @Composable
 fun CintraFloatingMenuDialog(
@@ -231,16 +246,29 @@ fun CintraFloatingMenuDialog(
 ) {
     val palette = CintraThemePalette
     val shape = RoundedCornerShape(24.dp)
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        anim.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 540f))
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Column(
             modifier = Modifier
-                .widthIn(min = 230.dp, max = 290.dp)
-                .shadow(24.dp, shape, spotColor = Color.Black.copy(alpha = 0.28f))
+                .widthIn(min = 236.dp, max = 296.dp)
+                .graphicsLayer {
+                    val p = anim.value
+                    alpha = p.coerceIn(0f, 1f)
+                    val sc = 0.88f + 0.12f * p
+                    scaleX = sc
+                    scaleY = sc
+                    translationY = (1f - p) * -14f
+                }
+                .shadow(26.dp, shape, spotColor = Color.Black.copy(alpha = 0.26f))
                 .clip(shape)
-                .background(if (palette.isDark) Color(0xF5181D28) else Color(0xFCFFFFFF))
+                .background(if (palette.isDark) Color(0xF6181D28) else Color(0xFDFFFFFF))
                 .border(0.85.dp, palette.borderSubtle, shape)
                 .padding(vertical = 10.dp),
         ) {

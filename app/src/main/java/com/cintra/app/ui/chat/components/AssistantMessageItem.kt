@@ -1543,9 +1543,11 @@ private fun CintraLiveUiView(
     var heightDp by remember { mutableStateOf(48) }
     val fgHex = if (palette.isDark) "#F1F5F9" else "#0F172A"
     val mutedHex = if (palette.isDark) "#94A3B8" else "#64748B"
-    val surfaceHex = if (palette.isDark) "rgba(255,255,255,0.06)" else "rgba(15,23,42,0.04)"
+    val cardHex = if (palette.isDark) "rgba(255,255,255,0.06)" else "#FFFFFF"
+    val surfaceHex = if (palette.isDark) "rgba(255,255,255,0.05)" else "#F8FAFC"
     val borderHex = if (palette.isDark) "rgba(255,255,255,0.11)" else "rgba(15,23,42,0.10)"
     val baseFontPx = (15.5f * fontScale).toInt()
+    val isDarkJs = if (palette.isDark) "true" else "false"
 
     val shellHtml = remember(palette.isDark, baseFontPx) {
         """<!DOCTYPE html>
@@ -1555,12 +1557,10 @@ private fun CintraLiveUiView(
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-:root{--fg:$fgHex;--muted:$mutedHex;--surface:$surfaceHex;--border:$borderHex;--accent:#0EA5E9;}
+:root{--fg:$fgHex;--muted:$mutedHex;--card:$cardHex;--surface:$surfaceHex;--border:$borderHex;--accent:#0EA5E9;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;padding:0;background:transparent!important;color:var(--fg);font-family:'Cairo',system-ui,-apple-system,sans-serif;font-size:${baseFontPx}px;line-height:1.75;overflow-x:hidden;overflow-y:hidden;word-wrap:break-word;}
 #root{width:100%;padding:2px 0;}
-#root>*{animation:cintraTypeIn 0.24s ease-out both;}
-@keyframes cintraTypeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
 .cintra-cursor{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--accent);margin-inline-start:6px;vertical-align:middle;animation:cPulse 0.7s infinite alternate;}
 @keyframes cPulse{from{opacity:.25;transform:scale(.85);}to{opacity:1;transform:scale(1.1);}}
 a{color:var(--accent);text-decoration:none;font-weight:600;}
@@ -1573,10 +1573,13 @@ button{font-family:inherit;cursor:pointer;}
 <div id="root"></div>
 <script>
 window.__scriptsRan = false;
+window.__isDark = $isDarkJs;
+window.__lastRenderTs = 0;
+window.__pendingTimer = null;
 function __reportH(){
   try{
-    var h = Math.ceil(document.getElementById('root').getBoundingClientRect().height + 10);
-    if(window.CintraBridge && h > 16) window.CintraBridge.reportHeight(Math.min(1800, Math.max(32, h)));
+    var h = Math.ceil(document.getElementById('root').getBoundingClientRect().height + 12);
+    if(window.CintraBridge && h > 20) window.CintraBridge.reportHeight(Math.min(2200, Math.max(36, h)));
   }catch(e){}
 }
 if(typeof ResizeObserver !== 'undefined'){
@@ -1585,21 +1588,39 @@ if(typeof ResizeObserver !== 'undefined'){
 function __stripIncomplete(raw, isFinal){
   var s = raw || '';
   if(!isFinal){
-    // Hide unclosed <script> or <style> blocks while streaming
     var endSc = '<' + '/script>';
     var endSt = '<' + '/style>';
     var scIdx = s.lastIndexOf('<' + 'script');
     if(scIdx >= 0 && s.indexOf(endSc, scIdx) < 0) s = s.slice(0, scIdx);
     var stIdx = s.lastIndexOf('<' + 'style');
     if(stIdx >= 0 && s.indexOf(endSt, stIdx) < 0) s = s.slice(0, stIdx);
-    // Strip trailing partial <tag...
     var lt = s.lastIndexOf('<');
     var gt = s.lastIndexOf('>');
     if(lt > gt) s = s.slice(0, lt);
   }
   return s;
 }
-window.__cintraUpdate = function(b64, isFinal){
+function __fixLightModeDarkCards(root){
+  if(window.__isDark) return;
+  try{
+    var els = root.querySelectorAll('div, section, article');
+    for(var i = 0; i < els.length; i++){
+      var el = els[i];
+      var bg = getComputedStyle(el).backgroundColor || '';
+      var m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if(m){
+        var r = +m[1], g = +m[2], b = +m[3];
+        var luma = 0.299*r + 0.587*g + 0.114*b;
+        if(luma < 58 && el.offsetHeight > 50){
+          el.style.background = '#FFFFFF';
+          el.style.color = '#0F172A';
+          el.style.border = '1px solid rgba(15,23,42,0.10)';
+        }
+      }
+    }
+  }catch(e){}
+}
+function __applyRender(b64, isFinal){
   try{
     var bytes = Uint8Array.from(atob(b64), function(c){ return c.charCodeAt(0); });
     var raw = new TextDecoder('utf-8').decode(bytes);
@@ -1621,9 +1642,24 @@ window.__cintraUpdate = function(b64, isFinal){
         });
       }
     }
+    __fixLightModeDarkCards(root);
     __reportH();
-    setTimeout(__reportH, 120);
+    setTimeout(__reportH, 100);
   }catch(e){}
+}
+window.__cintraUpdate = function(b64, isFinal){
+  var now = Date.now();
+  if(isFinal || (now - window.__lastRenderTs) >= 115){
+    clearTimeout(window.__pendingTimer);
+    window.__lastRenderTs = now;
+    __applyRender(b64, isFinal);
+  } else {
+    clearTimeout(window.__pendingTimer);
+    window.__pendingTimer = setTimeout(function(){
+      window.__lastRenderTs = Date.now();
+      __applyRender(b64, isFinal);
+    }, 115);
+  }
 };
 </script>
 </body>
@@ -1656,7 +1692,14 @@ window.__cintraUpdate = function(b64, isFinal){
                     settings.builtInZoomControls = false
                     settings.displayZoomControls = false
                     addJavascriptInterface(
-                        CintraHeightBridge { px -> post { heightDp = px.coerceIn(36, 1600) } },
+                        CintraHeightBridge { px ->
+                            post {
+                                val clamped = px.coerceIn(36, 2200)
+                                if (!isStreaming || clamped > heightDp) {
+                                    heightDp = clamped
+                                }
+                            }
+                        },
                         "CintraBridge",
                     )
                     webViewClient = object : android.webkit.WebViewClient() {

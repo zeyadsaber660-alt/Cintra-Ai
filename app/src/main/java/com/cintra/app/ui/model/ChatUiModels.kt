@@ -45,6 +45,8 @@ data class GeneratedPdfDoc(
     val fileName: String,
     val htmlContent: String,
     val summary: String = "",
+    val isLandscape: Boolean = false,
+    val singlePage: Boolean = false,
 )
 
 data class GeneratedGenericFile(

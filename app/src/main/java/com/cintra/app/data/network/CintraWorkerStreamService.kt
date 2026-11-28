@@ -366,6 +366,7 @@ class CintraWorkerStreamService(
                         leftTitle = s.optString("leftTitle", ""),
                         rightTitle = s.optString("rightTitle", ""),
                         accentOverride = s.optString("accent", "").ifBlank { null },
+                        imagePrompt = s.optString("imagePrompt", "").ifBlank { null },
                     )
                 }
                 if (slides.isNotEmpty()) GeneratedPptxDoc(title, fileName, slides, summary, theme) else null
@@ -436,13 +437,20 @@ class CintraWorkerStreamService(
         val summary = Regex("^SUMMARY:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
             ?: "ملف PDF عربي RTL جاهز للتحميل"
         val template = Regex("^TEMPLATE:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim()
-            ?: "study_guide"
+            ?: "free"
+        val orientRaw = Regex("^ORIENTATION:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim().orEmpty()
+        val singleRaw = Regex("^SINGLE_PAGE:\\s*(.+)$", RegexOption.MULTILINE).find(metaText)?.groupValues?.get(1)?.trim().orEmpty()
+        val isCert = title.contains("شهادة") || title.contains("certificate", true) || summary.contains("عرضي") || summary.contains("أفقية")
+        val isLandscape = orientRaw.equals("landscape", true) || isCert
+        val singlePage = singleRaw.equals("true", true) || isCert
 
         return GeneratedPdfDoc(
             title = title,
             fileName = fileName,
-            htmlContent = CintraPdfExporter.buildFromTemplate(title, summary, rawHtml, template),
+            htmlContent = CintraPdfExporter.buildFromTemplate(title, summary, rawHtml, template, isLandscape),
             summary = summary,
+            isLandscape = isLandscape,
+            singlePage = singlePage,
         )
     }
 

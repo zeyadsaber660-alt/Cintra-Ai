@@ -76,7 +76,9 @@ object CintraPdfExporter {
         subtitle: String,
         bodyHtml: String,
         template: String = "study_guide",
+        isLandscape: Boolean = false,
     ): String {
+        val vpWidth = if (isLandscape) 1123 else 794
         val cleanBody = formatHtmlExponents(bodyHtml)
         if (cleanBody.contains("<html", ignoreCase = true) && cleanBody.contains("</html>", ignoreCase = true)) {
             return ensureFullArabicHtml(title, cleanBody)
@@ -91,11 +93,11 @@ object CintraPdfExporter {
                 <html dir="rtl" lang="ar">
                 <head>
                   <meta charset="UTF-8" />
-                  <meta name="viewport" content="width=794, initial-scale=1.0, maximum-scale=1.0" />
+                  <meta name="viewport" content="width=$vpWidth, initial-scale=1.0, maximum-scale=1.0" />
                   <script src="https://cdn.tailwindcss.com"></script>
                   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
                   <style>
-                    html, body { width: 794px; max-width: 794px; margin: 0 auto; background: #FFFFFF; color: #0F172A; font-family: 'Cairo', 'Tajawal', sans-serif; line-height: 1.85; font-size: 14px; -webkit-text-size-adjust: 100%; padding: 32px; }
+                    html, body { width: ${vpWidth}px; max-width: ${vpWidth}px; margin: 0 auto; background: #FFFFFF; color: #0F172A; font-family: 'Cairo', 'Tajawal', sans-serif; line-height: 1.85; font-size: 14px; -webkit-text-size-adjust: 100%; padding: 32px; }
                     * { box-sizing: border-box; }
                     sup { font-size: 0.72em; line-height: 0; position: relative; vertical-align: baseline; top: -0.45em; }
                     thead { display: table-header-group; } tr, .math-block { page-break-inside: avoid; break-inside: avoid; }
@@ -191,6 +193,8 @@ object CintraPdfExporter {
         context: Context,
         htmlContent: String,
         fileName: String,
+        isLandscape: Boolean = false,
+        singlePage: Boolean = false,
         onSuccess: (Uri, String) -> Unit,
         onError: (String) -> Unit,
     ) {
@@ -206,10 +210,10 @@ object CintraPdfExporter {
 
                 val preparedHtml = ensureFullArabicHtml(safeBase, htmlContent)
 
-                val pageWidthPx = 794
-                val pageHeightPx = 1123
-                val pdfWidthPt = 595
-                val pdfHeightPt = 842
+                val pageWidthPx = if (isLandscape) 1123 else 794
+                val pageHeightPx = if (isLandscape) 794 else 1123
+                val pdfWidthPt = if (isLandscape) 842 else 595
+                val pdfHeightPt = if (isLandscape) 595 else 842
 
                 val activity = context.findActivity()
                 val rootView = activity?.window?.decorView as? ViewGroup
@@ -242,7 +246,7 @@ object CintraPdfExporter {
                             // Smart JS page-break protector: pushes any box/row/heading crossing a 1123px boundary cleanly to next page
                             val paginateJs = """
                                 (function(){
-                                  var H = 1123, M = 34;
+                                  var H = $pageHeightPx, M = 34; if (${if (singlePage) "true" else "false"}) return $pageHeightPx;
                                   var els = document.querySelectorAll('h2,h3,p,tr,.math-block,.box,.box-green,.box-amber');
                                   for (var i = 0; i < els.length; i++) {
                                     var el = els[i];
@@ -267,7 +271,7 @@ object CintraPdfExporter {
                             try {
                                 val jsHeight = jsHeightStr?.trim('"')?.toDoubleOrNull()?.toInt() ?: 0
                                 val rawContentHeight = maxOf(webView.contentHeight, jsHeight, pageHeightPx)
-                                val measuredContentPx = rawContentHeight.coerceAtMost(pageHeightPx * 60)
+                                val measuredContentPx = if (singlePage) pageHeightPx else rawContentHeight.coerceAtMost(pageHeightPx * 60)
 
                                 webView.measure(
                                     View.MeasureSpec.makeMeasureSpec(pageWidthPx, View.MeasureSpec.EXACTLY),
@@ -435,7 +439,7 @@ object CintraPdfExporter {
                     val jobName = fileName.removeSuffix(".pdf")
                     val adapter = webView.createPrintDocumentAdapter(jobName)
                     val attributes = PrintAttributes.Builder()
-                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                        .setMediaSize(if (isLandscape) PrintAttributes.MediaSize.ISO_A4.asLandscape() else PrintAttributes.MediaSize.ISO_A4)
                         .setResolution(PrintAttributes.Resolution("pdf", "pdf", 300, 300))
                         .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                         .build()

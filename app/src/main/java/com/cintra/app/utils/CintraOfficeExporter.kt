@@ -7,7 +7,12 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.util.Base64
+import com.cintra.app.data.security.CintraSecureVault
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -25,11 +30,12 @@ data class PptxThemeData(
 data class PptxSlideData(
     val title: String,
     val bullets: List<String>,
-    val layout: String = "cards", // cover, cards, two_column, stats, timeline, bullets, closing
+    val layout: String = "cards", // cover, image_split, cards, two_column, stats, timeline, bullets, closing
     val subtitle: String = "",
     val leftTitle: String = "",
     val rightTitle: String = "",
     val accentOverride: String? = null,
+    val imagePrompt: String? = null,
 )
 
 data class DocxSectionData(
@@ -39,9 +45,8 @@ data class DocxSectionData(
 
 /**
  * Pure-Kotlin Creative OpenXML generator for `.pptx` (PowerPoint) and `.docx` (Word).
- * v25: Zero rigid theme lock-in — dynamically applies the model's chosen color palette
- * and per-slide layout (`cover`, `cards`, `two_column`, `stats`, `timeline`, `bullets`, `closing`)
- * with full Arabic RTL & English LTR support.
+ * v27: Supports real embedded images (`ppt/media/imageN.jpg` + `<p:pic>`) fetched from the
+ * user's Image API, unconstrained topic-matched color palettes, 8 rich layouts, and crisp Arabic RTL.
  */
 object CintraOfficeExporter {
 
@@ -62,9 +67,47 @@ object CintraOfficeExporter {
         val r = h.substring(0, 2).toInt(16)
         val g = h.substring(2, 4).toInt(16)
         val b = h.substring(4, 6).toInt(16)
-        val luma = (0.299 * r + 0.587 * g + 0.114 * b)
-        return luma < 140.0
+        return (0.299 * r + 0.587 * g + 0.114 * b) < 140.0
     }
+
+    private fun fetchSlideImageBytes(prompt: String): ByteArray? = runCatching {
+        val endpoint = "${CintraSecureVault.resolveEndpoint()}/v1/images/generate"
+        val token = CintraSecureVault.resolveAppToken()
+        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 9_000
+            readTimeout = 20_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
+        }
+        conn.outputStream.use { os ->
+            os.write(JSONObject().put("prompt", prompt).toString().toByteArray(Charsets.UTF_8))
+        }
+        if (conn.responseCode !in 200..299) {
+            conn.disconnect()
+            return null
+        }
+        val body = conn.inputStream.bufferedReader().use { it.readText() }
+        conn.disconnect()
+        val json = JSONObject(body)
+        val b64 = json.optString("b64_json", "")
+        if (b64.isNotBlank()) {
+            val decoded = Base64.decode(b64, Base64.DEFAULT)
+            return if (decoded.size > 1000) decoded else null
+        }
+        val urlStr = json.optString("url", "")
+        if (urlStr.startsWith("http")) {
+            val imgConn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8_000
+                readTimeout = 12_000
+            }
+            val bytes = imgConn.inputStream.use { it.readBytes() }
+            imgConn.disconnect()
+            return if (bytes.size > 1000) bytes else null
+        }
+        null
+    }.getOrNull()
 
     fun savePptxToDownloads(
         context: Context,
@@ -81,7 +124,22 @@ object CintraOfficeExporter {
                 val safeBase = fileName.removeSuffix(".pptx").replace(Regex("[^\\p{L}\\p{N}_\\- ]"), "_").trim().ifBlank { "Cintra_Presentation" }
                 val finalName = "$safeBase.pptx"
                 val allSlides = if (slides.isEmpty()) listOf(PptxSlideData(title, listOf("Created by Cintra AI"), layout = "cover")) else slides
-                val bytes = buildPptxBytes(title, allSlides, theme)
+
+                // Fetch real images for up to 3 visual slides (cover + image_split slides)
+                val slideImages = mutableMapOf<Int, ByteArray>()
+                var fetchedCount = 0
+                allSlides.forEachIndexed { idx, s ->
+                    val prompt = s.imagePrompt?.takeIf { it.isNotBlank() }
+                    if (prompt != null && fetchedCount < 3) {
+                        val bytes = fetchSlideImageBytes(prompt)
+                        if (bytes != null) {
+                            slideImages[idx] = bytes
+                            fetchedCount++
+                        }
+                    }
+                }
+
+                val bytes = buildPptxBytes(title, allSlides, theme, slideImages)
                 val uri = writeDownloadsFile(
                     context = context,
                     fileName = finalName,
@@ -159,7 +217,20 @@ object CintraOfficeExporter {
       </p:sp>"""
     }
 
-    private fun buildPptxBytes(deckTitle: String, slides: List<PptxSlideData>, rawTheme: PptxThemeData): ByteArray {
+    private fun picShape(id: Int, name: String, rId: String, x: Long, y: Long, cx: Long, cy: Long): String {
+        return """      <p:pic>
+        <p:nvPicPr><p:cNvPr id="$id" name="$name"/><p:cNvPicPr><a:picLocks noChangeAspect="0"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="$rId"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+        <p:spPr><a:xfrm><a:off x="$x" y="$y"/><a:ext cx="$cx" cy="$cy"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom></p:spPr>
+      </p:pic>"""
+    }
+
+    private fun buildPptxBytes(
+        deckTitle: String,
+        slides: List<PptxSlideData>,
+        rawTheme: PptxThemeData,
+        slideImages: Map<Int, ByteArray> = emptyMap(),
+    ): ByteArray {
         val coverBg = cleanHex(rawTheme.bg, "0F172A")
         val slideBg = cleanHex(rawTheme.slideBg, "F8FAFC")
         val headerBg = cleanHex(rawTheme.headerBg, coverBg)
@@ -180,6 +251,11 @@ object CintraOfficeExporter {
                 zos.write(xml.toByteArray(Charsets.UTF_8))
                 zos.closeEntry()
             }
+            fun putBytes(path: String, data: ByteArray) {
+                zos.putNextEntry(ZipEntry(path))
+                zos.write(data)
+                zos.closeEntry()
+            }
 
             val slideOverrides = slides.indices.joinToString("\n") { i ->
                 """  <Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>"""
@@ -190,6 +266,8 @@ object CintraOfficeExporter {
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="jpg" ContentType="image/jpeg"/>
+  <Default Extension="png" ContentType="image/png"/>
   <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
   <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
   <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
@@ -271,16 +349,28 @@ $presRels
                 val slideAccent = cleanHex(slide.accentOverride, accent1)
                 val isRtl = slide.title.any { it in '\u0600'..'\u06FF' }
                 val rtlAttr = if (isRtl) """ rtl="1" algn="r"""" else ""
+                val imgBytes = slideImages[idx]
+                val hasImg = imgBytes != null
                 val shapes = StringBuilder()
                 val bgHex = if (isCover || isClosing) coverBg else slideBg
 
+                if (hasImg && imgBytes != null) {
+                    putBytes("ppt/media/image${idx + 1}.jpg", imgBytes)
+                }
+
                 if (isCover || isClosing) {
                     shapes.append(rectShape(2, "AccentStrip", 0L, 0L, 260000L, 6858000L, slideAccent))
-                    shapes.append(rectShape(3, "AccentPill", 720000L, 1280000L, 1200000L, 85000L, accent2, rounded = true))
+                    val textW = if (hasImg) 6300000L else 10400000L
+                    val textX = if (hasImg && isRtl) 5250000L else 720000L
+                    if (hasImg) {
+                        val picX = if (isRtl) 540000L else 7300000L
+                        shapes.append(picShape(8, "CoverPic", "rId2", picX, 950000L, 4350000L, 4950000L))
+                    }
+                    shapes.append(rectShape(3, "AccentPill", textX, 1380000L, 1250000L, 85000L, accent2, rounded = true))
                     shapes.append(
                         textShape(
-                            4, "CoverTitle", 720000L, 1580000L, 10400000L, 1850000L,
-                            """<a:p><a:pPr$rtlAttr/><a:r><a:rPr lang="en-US" sz="4200" b="1"><a:solidFill><a:srgbClr val="$coverTitleColor"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r></a:p>""",
+                            4, "CoverTitle", textX, 1750000L, textW, 1850000L,
+                            """<a:p><a:pPr$rtlAttr/><a:r><a:rPr lang="en-US" sz="4000" b="1"><a:solidFill><a:srgbClr val="$coverTitleColor"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(slide.title)}</a:t></a:r></a:p>""",
                         ),
                     )
                     val subLines = buildList {
@@ -290,8 +380,8 @@ $presRels
                     val subXml = subLines.joinToString("") { b ->
                         """<a:p><a:pPr$rtlAttr spcAft="12000"/><a:r><a:rPr lang="en-US" sz="1950"><a:solidFill><a:srgbClr val="$coverSubColor"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>${xmlEscape(b)}</a:t></a:r></a:p>"""
                     }
-                    shapes.append(textShape(5, "CoverSub", 720000L, 3550000L, 10400000L, 2300000L, subXml))
-                    shapes.append(rectShape(6, "BottomBar", 720000L, 6180000L, 10750000L, 22000L, slideAccent))
+                    shapes.append(textShape(5, "CoverSub", textX, 3720000L, textW, 2100000L, subXml))
+                    shapes.append(rectShape(6, "BottomBar", 720000L, 6220000L, 10750000L, 22000L, slideAccent))
                 } else {
                     // Header Band
                     shapes.append(rectShape(2, "HeaderBand", 0L, 0L, 12192000L, 1180000L, headerBg))
@@ -313,8 +403,22 @@ $presRels
                     val bullets = slide.bullets.ifEmpty { listOf(slide.subtitle.ifBlank { slide.title }) }
                     var nextId = 10
 
-                    when (layout) {
-                        "stats" -> {
+                    when {
+                        hasImg -> {
+                            // Rich Visual Split Layout: Real Image + Styled Content Card
+                            val picX = if (isRtl) 580000L else 6800000L
+                            val cardX = if (isRtl) 5620000L else 580000L
+                            shapes.append(picShape(nextId++, "SlidePic", "rId2", picX, 1560000L, 4800000L, 4480000L))
+                            shapes.append(rectShape(nextId++, "SplitCard", cardX, 1560000L, 5990000L, 4480000L, cardBg, borderHex = cardBorder, rounded = true))
+                            val barX = if (isRtl) cardX + 5990000L - 95000L else cardX
+                            shapes.append(rectShape(nextId++, "SplitBar", barX, 1740000L, 95000L, 4120000L, slideAccent, rounded = true))
+                            val pXml = bullets.take(5).joinToString("") { b ->
+                                """<a:p><a:pPr$rtlAttr spcAft="16000"/><a:r><a:rPr lang="en-US" sz="1800"><a:solidFill><a:srgbClr val="$bodyText"/></a:solidFill><a:latin typeface="Segoe UI"/></a:rPr><a:t>▪ ${xmlEscape(b)}</a:t></a:r></a:p>"""
+                            }
+                            shapes.append(textShape(nextId++, "SplitTxt", cardX + 220000L, 1780000L, 5450000L, 4040000L, pXml))
+                        }
+
+                        layout == "stats" -> {
                             val items = bullets.take(3)
                             val colW = (11032000L - (items.size - 1) * 240000L) / items.size
                             items.forEachIndexed { i, raw ->
@@ -340,7 +444,7 @@ $presRels
                             }
                         }
 
-                        "two_column" -> {
+                        layout == "two_column" -> {
                             val mid = (bullets.size + 1) / 2
                             val leftItems = bullets.take(mid)
                             val rightItems = bullets.drop(mid)
@@ -365,7 +469,7 @@ $presRels
                             }
                         }
 
-                        "timeline" -> {
+                        layout == "timeline" -> {
                             val steps = bullets.take(4)
                             val colW = (11032000L - (steps.size - 1) * 180000L) / steps.size
                             shapes.append(rectShape(nextId++, "TimeTrack", 580000L, 2150000L, 11032000L, 55000L, slideAccent))
@@ -390,7 +494,6 @@ $presRels
                         }
 
                         else -> {
-                            // Dynamic cards (<=4 bullets) or clean grouped list (>4 bullets)
                             if (bullets.size <= 4 && layout != "bullets") {
                                 val cardCount = bullets.size
                                 val startY = 1540000L
@@ -445,11 +548,13 @@ $shapes
   </p:cSld>
 </p:sld>"""
                 putEntry("ppt/slides/slide${idx + 1}.xml", slideXml)
+                val imgRelXml = if (hasImg) """
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image${idx + 1}.jpg"/>""" else ""
                 putEntry(
                     "ppt/slides/_rels/slide${idx + 1}.xml.rels",
                     """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>$imgRelXml
 </Relationships>""",
                 )
             }

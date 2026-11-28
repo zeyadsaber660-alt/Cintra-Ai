@@ -386,6 +386,22 @@ private fun GeneratedImageCard(prompt: String) {
     }
 
     LaunchedEffect(prompt, retryTick) {
+        val cacheDir = java.io.File(context.filesDir, "cintra_images").apply { mkdirs() }
+        val cacheKey = prompt.trim().hashCode().toUInt().toString(16)
+        val cacheFile = java.io.File(cacheDir, "img_$cacheKey.img")
+
+        if (retryTick == 0 && cacheFile.exists() && cacheFile.length() > 800L) {
+            val cachedBmp = withContext(Dispatchers.IO) {
+                runCatching { BitmapFactory.decodeFile(cacheFile.absolutePath) }.getOrNull()
+            }
+            if (cachedBmp != null) {
+                decodedBitmap = cachedBmp
+                progressPct = 100
+                isLoading = false
+                return@LaunchedEffect
+            }
+        }
+
         isLoading = true
         errorMsg = null
         val result = withContext(Dispatchers.IO) {
@@ -413,11 +429,25 @@ private fun GeneratedImageCard(prompt: String) {
         }
         if (result != null && result.second.isNotBlank()) {
             val bytes = runCatching { Base64.decode(result.second, Base64.DEFAULT) }.getOrNull()
-            decodedBitmap = bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+            if (bytes != null) {
+                withContext(Dispatchers.IO) { runCatching { cacheFile.writeBytes(bytes) } }
+                decodedBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }
             progressPct = 100
             isLoading = false
         } else if (result != null && result.first.startsWith("http")) {
-            resolvedUrl = result.first
+            val urlStr = result.first
+            resolvedUrl = urlStr
+            val downloaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = URL(urlStr).openStream().use { it.readBytes() }
+                    if (bytes.size > 800) {
+                        cacheFile.writeBytes(bytes)
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    } else null
+                }.getOrNull()
+            }
+            if (downloaded != null) decodedBitmap = downloaded
             progressPct = 100
             isLoading = false
         } else {
@@ -991,6 +1021,8 @@ fun GeneratedPdfFileCard(pdf: GeneratedPdfDoc) {
                                 context = context,
                                 htmlContent = pdf.htmlContent,
                                 fileName = pdf.fileName,
+                                isLandscape = pdf.isLandscape,
+                                singlePage = pdf.singlePage,
                                 onSuccess = { uri, finalName ->
                                     isSaving = false
                                     savedUri = uri

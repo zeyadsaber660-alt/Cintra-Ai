@@ -643,7 +643,12 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
             id = "u-${System.nanoTime()}",
             isUser = true,
             content = finalPrompt,
-            attachments = usedAttachments,
+            attachments = if (usedAttachments.isEmpty()) {
+                priorHistory.asReversed()
+                    .flatMap { it.attachments }
+                    .filter { !it.extractedText.isNullOrBlank() }
+                    .take(1)
+            } else usedAttachments,
         )
         val assistantMessage = ChatMessage(
             id = "a-${System.nanoTime()}",
