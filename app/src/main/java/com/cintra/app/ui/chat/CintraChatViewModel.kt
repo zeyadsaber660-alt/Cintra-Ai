@@ -643,12 +643,7 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
             id = "u-${System.nanoTime()}",
             isUser = true,
             content = finalPrompt,
-            attachments = if (usedAttachments.isEmpty()) {
-                priorHistory.asReversed()
-                    .flatMap { it.attachments }
-                    .filter { !it.extractedText.isNullOrBlank() }
-                    .take(1)
-            } else usedAttachments,
+            attachments = usedAttachments,
         )
         val assistantMessage = ChatMessage(
             id = "a-${System.nanoTime()}",
@@ -684,11 +679,17 @@ class CintraChatViewModel(application: Application) : AndroidViewModel(applicati
         val priorHistory = (_state.value.activeSession?.messages ?: emptyList())
             .filter { !it.isStreaming && it.id != userMessage.id && it.id != assistantMessage.id }
             .takeLast(6)
+        val effectiveAttachments = if (usedAttachments.isEmpty()) {
+            priorHistory.asReversed()
+                .flatMap { it.attachments }
+                .filter { !it.extractedText.isNullOrBlank() }
+                .take(1)
+        } else usedAttachments
         val request = AiStreamRequest(
             prompt = finalPrompt,
             model = model,
             tool = usedTool,
-            attachments = usedAttachments,
+            attachments = effectiveAttachments,
             history = priorHistory,
         )
         val assistantId = assistantMessage.id

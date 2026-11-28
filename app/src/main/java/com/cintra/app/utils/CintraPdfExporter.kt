@@ -422,6 +422,7 @@ object CintraPdfExporter {
         context: Context,
         htmlContent: String,
         fileName: String = "Cintra_Report",
+        isLandscape: Boolean = false,
         onReady: () -> Unit = {},
     ) {
         val mainHandler = Handler(Looper.getMainLooper())

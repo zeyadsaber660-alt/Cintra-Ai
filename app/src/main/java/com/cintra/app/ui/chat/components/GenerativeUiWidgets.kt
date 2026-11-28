@@ -1093,7 +1093,7 @@ fun GeneratedPdfFileCard(pdf: GeneratedPdfDoc) {
                     .background(palette.surface2)
                     .border(0.75.dp, palette.borderSubtle, RoundedCornerShape(14.dp))
                     .clickable {
-                        CintraPdfExporter.exportHtmlToPdf(context, pdf.htmlContent, pdf.fileName)
+                        CintraPdfExporter.exportHtmlToPdf(context, pdf.htmlContent, pdf.fileName, pdf.isLandscape)
                     }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 contentAlignment = Alignment.Center,
